@@ -29,17 +29,21 @@ import argparse
 def main():
     args = getArguments()
 
+    # Load in the user-specified files.
     links = loadGraph(args.graph)
     contigs = loadContigs(args.contigs)
     paths = loadPaths(args.paths)
 
+    # Add the links to each contig object.
     addLinksToContigs(contigs, paths, links)
 
+    # Prepare the output.
     output = []
     for contig in contigs:
         output.append(contig.getHeaderWithLinks())
         output.append(contig.getSequenceWithLineBreaks())
 
+    # Output to stdout or file, as specified by the user.
     if args.output != "":
         outputFile = open(args.output, 'w')
         for line in output:
@@ -54,7 +58,7 @@ def main():
 
 
 def getArguments():
-    parser = argparse.ArgumentParser(description='GetSPAdesContigGraph: a tool for creating a contig graph using a SPAdes assembly graph')
+    parser = argparse.ArgumentParser(description='GetSPAdesContigGraph: a tool for creating a FASTG contig graph from a SPAdes assembly')
     parser.add_argument('graph', help='The assembly_graph.fastg file made by SPAdes')
     parser.add_argument('contigs', help='A contigs or scaffolds fasta file made by SPAdes')
     parser.add_argument('paths', help='The paths file which corresponds to the contigs or scaffolds file')
