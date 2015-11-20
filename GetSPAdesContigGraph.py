@@ -22,16 +22,11 @@
 from __future__ import division
 from __future__ import print_function
 import sys
-import subprocess
 import os
 import argparse
-import datetime
-import shutil
-import itertools
 
 
 def main():
-    startTime = datetime.datetime.now()
     args = getArguments()
 
     links = loadGraph(args.graph)
