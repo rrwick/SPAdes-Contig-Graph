@@ -1,12 +1,12 @@
 # GetSPAdesContigGraph
 
-This tool produces a fastg graph from either a SPAdes contigs or scaffolds fasta file.  It uses the assembly_graph.fastg file, along with the paths file to determine which contigs/scaffolds are connected to each other in the assembly graph.
+This tool produces a fastg graph from either the contigs or scaffolds from a [SPAdes](http://bioinf.spbau.ru/spades) assembly.  It uses the sequences from the contigs/scaffolds fasta file and adds connections that it infers from the assembly_graph.fastg file and the paths file.
 
 The resulting graph has advantages over both the SPAdes assembly_graph.fastg file and the contigs/scaffolds fasta file:
 * Sequences have been processed by SPAdes' repeat resolution, like the contigs/scaffolds fasta files but unlike the assembly_graph.fastg file.
 * Connections are present between sequences, like the assembly_graph.fastg file but unlike the contigs/scaffolds files.
 
-GetSPAdesContigGraph requires the assembly to have been done by SPAdes 3.6.2 or later.
+GetSPAdesContigGraph requires an assembly from SPAdes 3.6.2 or later.
 
 
 ## Usage
