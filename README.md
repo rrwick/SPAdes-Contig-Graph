@@ -12,6 +12,7 @@ GetSPAdesContigGraph requires an assembly from SPAdes 3.6.2 or later.
 ```GetSPAdesContigGraph.py [-h] [-o OUTPUT] graph contigs paths```
 
 Example usage:
+
 `GetSPAdesContigGraph.py assembly_graph.fastg contigs.fasta contigs.paths -o contigs.fastg`
 
 If an output file isn't specified, the graph will be outputted to stdout.
