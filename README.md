@@ -14,7 +14,7 @@ GetSPAdesContigGraph requires an assembly from SPAdes 3.6.2 or later, as this is
 
 # Limitations
 
-It is important to note that the contig graph which results from this program will NOT necessary have all of the connections present in the full assembly graph.
+It is important to note that the contig graph which results from this program will NOT necessarily have all of the connections present in the full assembly graph.
 
 To illustrate why, consider the following example (described by SPAdes author Anton Korobeynikov):
 * An assembly graph has three segments: A, B and C.
