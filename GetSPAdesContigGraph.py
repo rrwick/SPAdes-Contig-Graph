@@ -29,9 +29,6 @@ import argparse
 def main():
     args = getArguments()
 
-    print(args.connection_priority)
-    print(args.length_priority)
-
     # Load in the user-specified files.
     links = loadGraph(args.graph)
     contigs = loadContigs(args.contigs)
@@ -73,7 +70,7 @@ def getArguments():
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-c', '--connection_priority', action='store_true', help='Prioritise graph connections over segment length')
-    group.add_argument('-l', '--length_priority', action='store_false', help='Prioritise segment length over graph connections')
+    group.add_argument('-l', '--length_priority', action='store_true', help='Prioritise segment length over graph connections')
 
     return parser.parse_args()
 
