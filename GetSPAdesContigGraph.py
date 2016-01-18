@@ -182,9 +182,7 @@ def loadGraph(graphFilename):
 
 # This function takes a path filename and returns a dictionary.
 # The dictionary key is the contig name.
-# The dictionary value is a tuple:
-#   the first graph segment in the path
-#   the last graph segment in the path
+# The dictionary value is a Path object.
 def loadPaths(pathFilename):
 
     paths = {}
@@ -192,7 +190,7 @@ def loadPaths(pathFilename):
     pathFile = open(pathFilename, 'r')
 
     contigName = ''
-    pathString = ''
+    pathList = []
     for line in pathFile:
 
         line = line.strip()
@@ -204,38 +202,31 @@ def loadPaths(pathFilename):
         # Lines starting with 'NODE' are the start of a new path
         if len(line) > 3 and line[0:4] == 'NODE':
 
-            # If a contig is currently stored, save it now.
+            # If a path is currently stored, save it now.
             if len(contigName) > 0:
-                paths[contigName] = getFirstAndLastSegmentFromPathString(pathString)
+                paths[contigName] = Path(pathList)
                 contigName = ''
-                pathString = ''
+                pathList = []
 
             contigName = line
 
         # If not a node name line, we assume this is a path line.
         else:
             pathLine = line
+
+            # Trim any semicolon from the end.
             if pathLine[-1] == ';':
                 pathLine = pathLine[0:-1]
-            if len(pathString) == 0:
-                pathString = pathLine
-            else:
-                pathString += ',' + pathLine
+
+            # Add the path to the path list
+            if len(pathLine) > 0:
+                pathList.append(pathLine.split(','))
 
     # Save the last contig.
     if len(contigName) > 0:
-        paths[contigName] = getFirstAndLastSegmentFromPathString(pathString)
+        paths[contigName] = Path(pathList)
 
     return paths
-
-
-
-
-def getFirstAndLastSegmentFromPathString(pathString):
-    pathStringParts = pathString.split(',')
-    firstPart = pathStringParts[0]
-    lastPart = pathStringParts[-1]
-    return (firstPart, lastPart)
 
 
 
@@ -267,7 +258,9 @@ def addLinksToContigs(contigs, paths, links):
 
     # First store the first and last graph segments for each contig.
     for contig in contigs:
-        firstSegment, lastSegment = paths[contig.fullname]
+        firstSegment = paths[contig.fullname].getFirstSegment()
+        lastSegment = paths[contig.fullname].getLastSegment()
+
         contig.addGraphSegments(firstSegment, lastSegment)
 
     # Now for each contig, we take the last graph segment, find the segments
@@ -401,6 +394,22 @@ class Contig:
 
 
 
+# This class holds a path: the lists of graph segments making up a contig.
+class Path:
+    def __init__(self, segmentLists):
+        self.segmentLists = segmentLists
+
+    def getFirstSegment(self):
+        return self.segmentLists[0][0]
+
+    def getLastSegment(self):
+        return self.segmentLists[-1][-1]
+
+    def __str__(self):
+        return str(self.segmentLists)
+
+    def __repr__(self):
+        return str(self.segmentLists)
 
 
 
