@@ -34,8 +34,11 @@ def main():
     contigs = loadContigs(args.contigs)
     paths = loadPaths(args.paths)
 
-    # Add the links to each contig object.
-    addLinksToContigs(contigs, paths, links)
+    # Add the paths to each contig object, so each contig knows its graph path.
+    addPathsToContigs(contigs, paths)
+
+    # Add the links to each contig object, turning the contigs into a graph.
+    addLinksToContigs(contigs, links)
 
     # Prepare the output.
     output = []
@@ -44,7 +47,7 @@ def main():
         output.append(contig.getSequenceWithLineBreaks())
 
     # Output to stdout or file, as specified by the user.
-    if args.output != "":
+    if args.output != '':
         outputFile = open(args.output, 'w')
         for line in output:
             outputFile.write(line)
@@ -62,7 +65,7 @@ def getArguments():
     parser.add_argument('graph', help='The assembly_graph.fastg file made by SPAdes')
     parser.add_argument('contigs', help='A contigs or scaffolds fasta file made by SPAdes')
     parser.add_argument('paths', help='The paths file which corresponds to the contigs or scaffolds file')
-    parser.add_argument('-o', '--output', action='store', help='Save the output graph to this file (default: write graph to stdout)', default="")
+    parser.add_argument('-o', '--output', action='store', help='Save the output graph to this file (default: write graph to stdout)', default='')
 
     return parser.parse_args()
 
@@ -141,7 +144,7 @@ def loadGraph(graphFilename):
         if line[-1] == ';':
             line = line[:-1]
 
-        lineParts = line.split(":")
+        lineParts = line.split(':')
 
         startingSegment = lineParts[0]
         start = getNumberFromFullSequenceName(startingSegment)
@@ -156,7 +159,7 @@ def loadGraph(graphFilename):
         if len(lineParts) < 2:
             continue
 
-        endingSegments = lineParts[1].split(",")
+        endingSegments = lineParts[1].split(',')
         ends = []
         for endingSegment in endingSegments:
             ends.append(getNumberFromFullSequenceName(endingSegment))
@@ -233,33 +236,41 @@ def loadPaths(pathFilename):
 
 
 def getNumberFromFullSequenceName(fullSequenceName):
-    number = fullSequenceName.split("_")[1]
+    number = fullSequenceName.split('_')[1]
     if fullSequenceName[-1] == "'":
-        number += "-"
+        number += '-'
     else:
-        number += "+"
+        number += '+'
     return number
 
 
 
 
 def getOppositeSequenceNumber(number):
-    if number[-1] == "+":
-        return number[0:-1] + "-"
+    if number[-1] == '+':
+        return number[0:-1] + '-'
     else:
-        return number[0:-1] + "+"
+        return number[0:-1] + '+'
+
+
+
+# This function adds the path information to the contig objects, so each contig
+# knows its graph path.
+def addPathsToContigs(contigs, paths):
+    for contig in contigs:
+        contig.addPaths(paths[contig.fullname])
 
 
 
 
-# This function uses the contents of the paths dictionary to add link
+# This function uses the contents of the contig paths to add link
 # information to the contigs.
-def addLinksToContigs(contigs, paths, links):
+def addLinksToContigs(contigs, links):
 
     # First store the first and last graph segments for each contig.
     for contig in contigs:
-        firstSegment = paths[contig.fullname].getFirstSegment()
-        lastSegment = paths[contig.fullname].getLastSegment()
+        firstSegment = contig.paths.getFirstSegment()
+        lastSegment = contig.paths.getLastSegment()
 
         contig.addGraphSegments(firstSegment, lastSegment)
 
@@ -303,7 +314,7 @@ def getReverseComplementContig(contig):
 
 def getReverseComplement(forwardSequence):
 
-    reverseComplement = ""
+    reverseComplement = ''
     for i in reversed(range(len(forwardSequence))):
         base = forwardSequence[i]
 
@@ -351,16 +362,22 @@ class Contig:
 
     def __init__(self, name, sequence):
         self.fullname = name
-        nameParts = name.split("_")
+        nameParts = name.split('_')
         self.number = int(nameParts[1])
         self.sequence = sequence
-        self.linkedContigs = []
+        self.startingSegment = ''
+        self.endingSegment = ''
+        self.linkedContigs = [] # filled by addLinkedContigs
+        self.paths = [] # Filled by addPaths
 
     def __str__(self):
         return self.fullname
 
     def __repr__(self):
         return self.fullname
+
+    def addPaths(self, paths):
+        self.paths = paths
 
     def addGraphSegments(self, startingSegment, endingSegment):
         self.startingSegment = startingSegment
@@ -375,17 +392,17 @@ class Contig:
         headerWithEdges = '>' + self.fullname
 
         if len(self.linkedContigs) > 0:
-            headerWithEdges += ":"
+            headerWithEdges += ':'
             for linkedContig in self.linkedContigs:
                 headerWithEdges += linkedContig.fullname + ','
             headerWithEdges = headerWithEdges[0:-1]
 
-        headerWithEdges += ";\n"
+        headerWithEdges += ';\n'
         return headerWithEdges
 
     def getSequenceWithLineBreaks(self):
         sequenceRemaining = self.sequence
-        returnSequence = ""
+        returnSequence = ''
         while len(sequenceRemaining) > 60:
             returnSequence += sequenceRemaining[0:60] + '\n'
             sequenceRemaining = sequenceRemaining[60:]
