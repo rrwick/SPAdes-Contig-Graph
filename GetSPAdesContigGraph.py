@@ -29,6 +29,9 @@ import argparse
 def main():
     args = getArguments()
 
+    print(args.connection_priority)
+    print(args.length_priority)
+
     # Load in the user-specified files.
     links = loadGraph(args.graph)
     contigs = loadContigs(args.contigs)
@@ -62,10 +65,15 @@ def main():
 
 def getArguments():
     parser = argparse.ArgumentParser(description='GetSPAdesContigGraph: a tool for creating a FASTG contig graph from a SPAdes assembly')
+
     parser.add_argument('graph', help='The assembly_graph.fastg file made by SPAdes')
     parser.add_argument('contigs', help='A contigs or scaffolds fasta file made by SPAdes')
     parser.add_argument('paths', help='The paths file which corresponds to the contigs or scaffolds file')
     parser.add_argument('-o', '--output', action='store', help='Save the output graph to this file (default: write graph to stdout)', default='')
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-c', '--connection_priority', action='store_true', help='Prioritise graph connections over segment length')
+    group.add_argument('-l', '--length_priority', action='store_false', help='Prioritise segment length over graph connections')
 
     return parser.parse_args()
 
