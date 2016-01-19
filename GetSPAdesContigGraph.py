@@ -44,7 +44,8 @@ def main():
     if (args.connection_priority):
         # TO DO: CHECK IF BLAST IS INSTALLED
         segmentSequences = loadGraphSequences(args.graph)
-        contigs = splitContigs(contigs, links, segmentSequences)
+        graphOverlap = getGraphOverlap(links, segmentSequences)
+        contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
 
     # Add the links to each contig object, turning the contigs into a graph.
     addLinksToContigs(contigs, links)
@@ -418,7 +419,7 @@ def getReverseComplement(forwardSequence):
 # Specifically, it looks for graph segments which are connected to the end of
 # one contig and occur in the middle of a second contig.  In such cases, the
 # second contig is split to allow for the connection.
-def splitContigs(contigs, links, segmentSequences):
+def splitContigs(contigs, links, segmentSequences, graphOverlap):
 
     # Compile lists of all graph segments which reside on the ends of contigs.
     contigStartSegments = []
@@ -470,13 +471,12 @@ def splitContigs(contigs, links, segmentSequences):
 
         # If there are splits to be done, then we make the new contigs!
         if splitPoints:
-            contig.determineAllSegmentLocations(segmentSequences)
-            quit() #TEMP
+            contig.determineAllSegmentLocations(segmentSequences, graphOverlap)
 
             for splitPoint in reversed(splitPoints):
                 contigPart1, contigPart2 = splitContig(contig, splitPoint)
                 newContigs.append(contigPart2)
-                contig = contigPart1
+                contig = contigPart1    
             newContigs.append(contig)
 
         # If there weren't any split points, there's nothing to do.  Just add
@@ -501,6 +501,13 @@ def splitContig(contig, splitPoint):
 
     return
 
+
+
+def getGraphOverlap(links, segmentSequences):
+
+    # TO DO: THIS WHOLE FUNCTION
+
+    return 11 #TEMP
 
 
 
@@ -577,7 +584,7 @@ class Contig:
     # This function determines the start and end coordinates of each of the
     # contig's segments, in contig sequence coordinates.  This information is
     # necessary before we can split a contig.
-    def determineAllSegmentLocations(self, segmentSequences):
+    def determineAllSegmentLocations(self, segmentSequences, graphOverlap):
 
         #Create a temporary directory for doing BLAST searches.
         if not os.path.exists('GetSPAdesContigGraph-temp'):
@@ -594,6 +601,12 @@ class Contig:
 
         for i in range(len(self.path.segmentList)):
             segment = self.path.segmentList[i]
+
+            # Don't deal with assembly gaps just yet - we'll give them contig
+            # start/end coordinates after we've finished with the real
+            # segments.
+            if segment == "gap":
+                continue
 
             segmentSequence = segmentSequences[segment]
             segmentLength = len(segmentSequence)
@@ -626,14 +639,14 @@ class Contig:
                     filteredAlignments.append(blastAlignment)
             filteredAlignments.sort()
 
+            segmentOccurrencesInPath = self.path.segmentList.count(segment)
+            # TO DO: CHECK HERE TO MAKE SURE THE FILTERED BLAST HITS AND THE SEGMENT OCCURRENCES ARE THE SAME!  IF NOT, I NEED TO INTELLIGENTLY DEAL WITH THE DISCREPANCY!
+
             # Determine which occurrence of this segment in this path we are
             # currently on, and use that to identify the correct BLAST
             # alignment.
-            segmentOccurrencesInPath = self.path.segmentList.count(segment)
             segmentOccurrencesInPathBefore = self.path.segmentList[:i].count(segment)
             correctBlastAlignment = filteredAlignments[segmentOccurrencesInPathBefore]
-
-            # TO DO: CHECK HERE TO MAKE SURE THE FILTERED BLAST HITS AND THE SEGMENT OCCURRENCES ARE THE SAME!  IF NOT, I NEED TO INTELLIGENTLY DEAL WITH THE DISCREPANCY!
 
             # Use the BLAST alignment to determine the query's start and end
             # coordinates in the contig.
@@ -645,8 +658,28 @@ class Contig:
 
         shutil.rmtree('GetSPAdesContigGraph-temp')
 
+        # Now we have to go back and assign contig start/end positions for any
+        # gap segments.
+        segmentCount = len(self.path.segmentList)
+        for i in range(segmentCount):
+            segment = self.path.segmentList[i]
+            if segment != 'gap':
+                continue
 
+            gapStartInContig = 1
+            gapEndInContig = len(self.sequence)
 
+            if i > 0:
+                gapStartInContig = self.path.contigCoordinates[i - 1][1] - graphOverlap + 1
+            if i < segmentCount - 1:
+                gapEndInContig = self.path.contigCoordinates[i + 1][0] + graphOverlap - 1
+
+            if gapStartInContig < 1:
+                gapStartInContig = 1
+            if gapStartInContig > len(self.sequence):
+                gapStartInContig = len(self.sequence)
+
+            self.path.contigCoordinates[i] = (gapStartInContig, gapEndInContig)
 
 
 
@@ -656,7 +689,7 @@ class Contig:
 class Path:
     def __init__(self, segmentList):
         self.segmentList = segmentList
-        self.contigCoordinates = [(0,0) for i in range(10)]
+        self.contigCoordinates = [(0,0) for i in range(len(segmentList))]
 
     def getFirstSegment(self):
         return self.segmentList[0]
@@ -665,10 +698,10 @@ class Path:
         return self.segmentList[-1]
 
     def __str__(self):
-        return str(self.segmentList)
+        return str(self.segmentList) + ', ' + str(self.contigCoordinates) 
 
     def __repr__(self):
-        return str(self.segmentList)
+        return str(self.segmentList) + ', ' + str(self.contigCoordinates) 
 
     def getSegmentCount(self):
         return len(segmentList)
