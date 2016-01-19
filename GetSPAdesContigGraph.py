@@ -431,10 +431,20 @@ def splitContigs(contigs, links):
 
 
 
+
 # This function takes a contig and returns two contigs, split at the split
 # point.  The split point is an index for the segment for the segment in the
 # contig's path.
 def splitContig(contig, splitPoint):
+
+
+
+
+
+
+
+
+
     return
 
 
@@ -501,15 +511,6 @@ class Contig:
         segmentLocations = self.paths.findSegmentLocations(s)
         return [x+1 for x in segmentLocations]
 
-    # def containsSegmentAnywhereButStart(self, segment):
-    #     return self.paths.containsSegmentAnywhereButStart(segment)
-
-    # def containsSegmentAnywhereButEnd(self, segment):
-    #     return self.paths.containsSegmentAnywhereButEnd(segment)
-
-
-
-
 
 
 # This class holds a path: the lists of graph segments making up a contig.
@@ -528,28 +529,6 @@ class Path:
 
     def __repr__(self):
         return str(self.segmentLists)
-
-    # def containsSegmentAnywhereButStart(self, segment):
-    #     for i in range(len(self.segmentLists)):
-    #         segmentList = self.segmentLists[i]
-    #         for j in range(len(segmentList)):
-    #             if i == 0 and j == 0:
-    #                 continue
-    #             if segmentList[j] == segment:
-    #                 return True
-    #     return False
-
-    # def containsSegmentAnywhereButEnd(self, segment):
-    #     lastI = len(self.segmentLists) - 1
-    #     for i in range(len(self.segmentLists)):
-    #         segmentList = self.segmentLists[i]
-    #         lastJ = len(segmentList) - 1
-    #         for j in range(len(segmentList)):
-    #             if i == lastI and j == lastJ:
-    #                 continue
-    #             if segmentList[j] == segment:
-    #                 return True
-    #     return False
 
     def getSegmentCount(self):
         count = 0
