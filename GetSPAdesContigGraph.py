@@ -42,13 +42,11 @@ def main():
     # If the user chose to prioritise connections, then it is necessary to
     # split contigs which have an internal connection.
     if (args.connection_priority):
+
         # TO DO: CHECK IF BLAST IS INSTALLED
+
         segmentSequences = loadGraphSequences(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
-
-        print(graphOverlap)
-        quit()
-
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
 
     # Add the links to each contig object, turning the contigs into a graph.
@@ -453,6 +451,7 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
 
     # Now split any contig which has one of those segments in its middle.
     newContigs = []
+    nextContigNumber = 1
     for contig in contigs:
 
         # This will contain the locations at which the contig must be split.
@@ -478,15 +477,20 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
             contig.determineAllSegmentLocations(segmentSequences, graphOverlap)
 
             for splitPoint in reversed(splitPoints):
-                contigPart1, contigPart2 = splitContig(contig, splitPoint)
+                contigPart1, contigPart2 = splitContig(contig, splitPoint, nextContigNumber)
                 newContigs.append(contigPart2)
-                contig = contigPart1    
+                contig = contigPart1
+                nextContigNumber += 1
+
             newContigs.append(contig)
 
-        # If there weren't any split points, there's nothing to do.  Just add
-        # the contig to the newContigs list and continue.
+        # If there weren't any split points, then we don't have to split the
+        # contig, but we do have to renumber it.
         else:
-            newContigs.append(contig)
+            renumberedContig = contig
+            renumberedContig.renumber(nextContigNumber)
+            newContigs.append(renumberedContig)
+            nextContigNumber += 1
 
     return newContigs
 
@@ -497,39 +501,35 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
 # This function takes a contig and returns two contigs, split at the split
 # point.  The split point is an index for the segment for the segment in the
 # contig's path.
-def splitContig(contig, splitPoint):
+def splitContig(contig, splitPoint, nextContigNumber):
 
+    # The indices are bit confusing here, as the contigCoordinates are 1-based
+    # with an inclusive end (because that's how BLAST does it).  To get to
+    # 0-based and exclusive end (for Python), we subtract one from the start.
+    newContig1Path = Path(contig.path.segmentList[:splitPoint])
+    newContig1PathContigCoordinates = contig.path.contigCoordinates[:splitPoint]
+    newContig1SeqStart = newContig1PathContigCoordinates[0][0] - 1
+    newContig1SeqEnd = newContig1PathContigCoordinates[-1][1]
+    newContig1Sequence = contig.sequence[newContig1SeqStart:newContig1SeqEnd]
 
+    newContig2Path = Path(contig.path.segmentList[splitPoint:])
+    newContig2PathContigCoordinates = contig.path.contigCoordinates[splitPoint:]
+    newContig2SeqStart = newContig2PathContigCoordinates[0][0] - 1
+    newContig2SeqEnd = newContig2PathContigCoordinates[-1][1]
+    newContig2Sequence = contig.sequence[newContig2SeqStart:newContig2SeqEnd]
 
+    # Give the next contig number to the second piece, as the first one may
+    # have to be split further.  It will be renumber, if necessary, later.
+    newContig1Name = 'NODE_0_length_' + str(len(newContig1Sequence)) + '_cov_' + str(contig.cov)
+    newContig2Name = 'NODE_' + str(nextContigNumber) + '_length_' + str(len(newContig2Sequence)) + '_cov_' + str(contig.cov)
 
+    newContig1 = Contig(newContig1Name, newContig1Sequence)
+    newContig1.addPath(newContig1Path)
 
+    newContig2 = Contig(newContig2Name, newContig2Sequence)
+    newContig2.addPath(newContig2Path)
 
-
-
-
-
-
-
-
-
-    # TO DO: THIS WHOLE FUNCTION
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    return
+    return newContig1, newContig2
 
 
 
@@ -629,6 +629,7 @@ class Contig:
         self.fullname = name
         nameParts = name.split('_')
         self.number = int(nameParts[1])
+        self.cov = float(nameParts[5])
         self.sequence = sequence
         self.linkedContigs = [] # filled by addLinkedContigs
 
@@ -637,6 +638,10 @@ class Contig:
 
     def __repr__(self):
         return self.fullname
+
+    def renumber(self, newNumber):
+        self.number = newNumber
+        self.fullname = 'NODE_' + str(newNumber) + '_length_' + str(len(self.sequence)) + '_cov_' + str(self.cov)
 
     def addPath(self, path):
         self.path = path
