@@ -45,6 +45,10 @@ def main():
         # TO DO: CHECK IF BLAST IS INSTALLED
         segmentSequences = loadGraphSequences(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
+
+        print(graphOverlap)
+        quit()
+
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
 
     # Add the links to each contig object, turning the contigs into a graph.
@@ -496,7 +500,33 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
 def splitContig(contig, splitPoint):
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     # TO DO: THIS WHOLE FUNCTION
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     return
@@ -510,132 +540,62 @@ def splitContig(contig, splitPoint):
 
 
 
-# def getAllPossibleOverlaps(sequence1, sequence2, max)
+
+# This function tests a single overlap between two sequences.
+def doesOverlapWork(s1, s2, overlap):
+    endOfS1 = s1[-overlap:]
+    startOfS2 = s2[:overlap]
+    return endOfS1 == startOfS2
 
 
+# This function tries the possibleOverlaps in the given list and returns
+# those that work.
+def getPossibleOverlaps(s1, s2, possibleOverlaps):
 
+    newPossibleOverlaps = []
 
+    for possibleOverlap in possibleOverlaps:
+        if doesOverlapWork(s1, s2, possibleOverlap):
+            newPossibleOverlaps.append(possibleOverlap)
+
+    return newPossibleOverlaps
 
 
 # This function figures out what the graph overlap size is.
 def getGraphOverlap(links, segmentSequences):
 
-    # TO DO: THIS WHOLE FUNCTION
-
-    return 11 #TEMP
-
     if len(links) == 0:
         return 0
 
-    shortestSegmentSequence = min(segmentSequences.items())
+    # Determine the shortest segment in the graph, as this will be the maximum
+    # possible overlap.
+    segmentLengths = []
+    for key, value in segmentSequences.items():
+        segmentLengths.append(len(value))
+    shortestSegmentSequence = min(segmentLengths)
 
-    print(shortestSegmentSequence)
-    quit()
+    # Now we loop through each overlap looking at the segment pairs.
+    possibleOverlaps = range(1, shortestSegmentSequence + 1)
+    for start, ends in links.iteritems():
+        s1 = segmentSequences[start]
+        for endingSegment in ends:
+            s2 = segmentSequences[endingSegment]
+            possibleOverlaps = getPossibleOverlaps(s1, s2, possibleOverlaps)
 
-#     //Determine the overlap for each edge.
-#     QMapIterator<QPair<DeBruijnNode*, DeBruijnNode*>, DeBruijnEdge*> i(m_deBruijnGraphEdges);
-#     while (i.hasNext())
-#     {
-#         i.next();
-#         i.value()->autoDetermineExactOverlap();
-#     }
+            # If no overlaps work, then we return 0.
+            # This shouldn't happen, as every SPAdes graph should have overlaps.
+            if len(possibleOverlaps) == 0:
+                return 0
 
-#     //The expectation here is that most overlaps will be
-#     //the same or from a small subset of possible sizes.
-#     //Edges with an overlap that do not match the most common
-#     //overlap(s) are suspected of having their overlap
-#     //misidentified.  They are therefore rechecked using the
-#     //common ones.
-#     std::vector<int> overlapCounts = makeOverlapCountVector();
+            # If only one overlap works, then that's our answer!
+            if len(possibleOverlaps) == 1:
+                return possibleOverlaps[0]
 
-#     //Sort the overlaps in order of decreasing numbers of edges.
-#     //I.e. the first overlap size in the vector will be the most
-#     //common overlap, the second will be the second most common,
-#     //etc.
-#     std::vector<int> sortedOverlaps;
-#     int overlapsSoFar = 0;
-#     double fractionOverlapsFound = 0.0;
-#     while (fractionOverlapsFound < 1.0)
-#     {
-#         int mostCommonOverlap = 0;
-#         int mostCommonOverlapCount = 0;
-
-#         //Find the overlap size with the most instances.
-#         for (size_t i = 0; i < overlapCounts.size(); ++i)
-#         {
-#             if (overlapCounts[i] > mostCommonOverlapCount)
-#             {
-#                 mostCommonOverlap = int(i);
-#                 mostCommonOverlapCount = overlapCounts[i];
-#             }
-#         }
-
-#         //Add that overlap to the common collection and remove it from the counts.
-#         sortedOverlaps.push_back(mostCommonOverlap);
-#         overlapsSoFar += mostCommonOverlapCount;
-#         fractionOverlapsFound = double(overlapsSoFar) / edgeCount;
-#         overlapCounts[mostCommonOverlap] = 0;
-#     }
-
-#     //For each edge, see if one of the more common overlaps also works.
-#     //If so, use that instead.
-#     QMapIterator<QPair<DeBruijnNode*, DeBruijnNode*>, DeBruijnEdge*> j(m_deBruijnGraphEdges);
-#     while (j.hasNext())
-#     {
-#         j.next();
-#         DeBruijnEdge * edge = j.value();
-#         for (size_t k = 0; k < sortedOverlaps.size(); ++k)
-#         {
-#             if (edge->getOverlap() == sortedOverlaps[k])
-#                 break;
-#             else if (edge->testExactOverlap(sortedOverlaps[k]))
-#             {
-#                 edge->setOverlap(sortedOverlaps[k]);
-#                 break;
-#             }
-#         }
-#     }
-# }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    # If the code gets here, that means we have tried every segment pair and
+    # there are still multiple possible overlaps.  This shouldn't happen in
+    # anything but tiny graphs or seriously pathological cases.
+    print("Error: failed to correctly determine graph overlap", file=sys.stderr)
+    return 0
 
 
 
@@ -645,6 +605,20 @@ def saveSequenceToFastaFile(sequence, sequenceName, filename):
     fastaFile.write('\n')
     fastaFile.write(sequence)
     fastaFile.write('\n')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
