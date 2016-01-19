@@ -24,13 +24,15 @@ from __future__ import print_function
 import sys
 import os
 import argparse
+import shutil
+import subprocess
 
 
 def main():
     args = getArguments()
 
     # Load in the user-specified files.
-    links = loadGraph(args.graph)
+    links = loadGraphLinks(args.graph)
     contigs = loadContigs(args.contigs)
     paths = loadPaths(args.paths)
 
@@ -40,7 +42,9 @@ def main():
     # If the user chose to prioritise connections, then it is necessary to
     # split contigs which have an internal connection.
     if (args.connection_priority):
-        contigs = splitContigs(contigs, links)
+        # TO DO: CHECK IF BLAST IS INSTALLED
+        segmentSequences = loadGraphSequences(args.graph)
+        contigs = splitContigs(contigs, links, segmentSequences)
 
     # Add the links to each contig object, turning the contigs into a graph.
     addLinksToContigs(contigs, links)
@@ -134,7 +138,7 @@ def loadContigs(contigFilename):
 # links.
 # The dictionary key is the starting graph segment.
 # The dictionary value is a list of the ending graph segments.
-def loadGraph(graphFilename):
+def loadGraphLinks(graphFilename):
 
     links = {}
     graphFile = open(graphFilename, 'r')
@@ -188,6 +192,54 @@ def loadGraph(graphFilename):
                 links[endRevComp].append(startRevComp)
 
     return links
+
+
+
+# This function takes a graph filename and returns a dictionary of the graph
+# sequences.
+# The dictionary key is the graph segment names.
+# The dictionary value is the graph segment sequence string.
+def loadGraphSequences(graphFilename):
+
+    sequences = {}
+
+    graphFile = open(graphFilename, 'r')
+
+    name = ''
+    sequence = ''
+    for line in graphFile:
+
+        strippedLine = line.strip()
+
+        # Skip empty lines.
+        if len(strippedLine) == 0:
+            continue
+
+        # Header lines indicate the start of a new contig.
+        if strippedLine[0] == '>':
+
+            # If a sequence is currently stored, save it now.
+            if len(name) > 0:
+                sequences[name] = sequence
+                name = ''
+                sequence = ''
+
+            if strippedLine[-1] == ';':
+                strippedLine = strippedLine[:-1]
+
+            lineParts = strippedLine.split(':')
+            segmentFullName = lineParts[0]
+            name = getNumberFromFullSequenceName(segmentFullName)
+
+        # If not a header line, we assume this is a sequence line.
+        else:
+            sequence += strippedLine
+
+    # Save the last contig.
+    if len(name) > 0:
+        sequences[name] = sequence
+
+    return sequences
 
 
 
@@ -270,7 +322,7 @@ def getOppositeSequenceNumber(number):
 # knows its graph path.
 def addPathsToContigs(contigs, paths):
     for contig in contigs:
-        contig.addPaths(paths[contig.fullname])
+        contig.addPath(paths[contig.fullname])
 
 
 
@@ -366,7 +418,7 @@ def getReverseComplement(forwardSequence):
 # Specifically, it looks for graph segments which are connected to the end of
 # one contig and occur in the middle of a second contig.  In such cases, the
 # second contig is split to allow for the connection.
-def splitContigs(contigs, links):
+def splitContigs(contigs, links, segmentSequences):
 
     # Compile lists of all graph segments which reside on the ends of contigs.
     contigStartSegments = []
@@ -418,6 +470,8 @@ def splitContigs(contigs, links):
 
         # If there are splits to be done, then we make the new contigs!
         if splitPoints:
+            contig.determineAllSegmentLocations(segmentSequences)
+            quit() #TEMP
 
             for splitPoint in reversed(splitPoints):
                 contigPart1, contigPart2 = splitContig(contig, splitPoint)
@@ -435,20 +489,27 @@ def splitContigs(contigs, links):
 
 
 
+
 # This function takes a contig and returns two contigs, split at the split
 # point.  The split point is an index for the segment for the segment in the
 # contig's path.
 def splitContig(contig, splitPoint):
 
 
-
-
-
-
-
+    # TO DO: THIS WHOLE FUNCTION
 
 
     return
+
+
+
+
+def saveSequenceToFastaFile(sequence, sequenceName, filename):
+    fastaFile = open(filename, 'w')
+    fastaFile.write('>' + sequenceName)
+    fastaFile.write('\n')
+    fastaFile.write(sequence)
+    fastaFile.write('\n')
 
 
 
@@ -468,14 +529,14 @@ class Contig:
     def __repr__(self):
         return self.fullname
 
-    def addPaths(self, paths):
-        self.paths = paths
+    def addPath(self, path):
+        self.path = path
 
     def getStartingSegment(self):
-        return self.paths.getFirstSegment()
+        return self.path.getFirstSegment()
 
     def getEndingSegment(self):
-        return self.paths.getLastSegment()
+        return self.path.getLastSegment()
 
     def addLinkedContigs(self, linkedContigs):
         self.linkedContigs = linkedContigs
@@ -504,15 +565,90 @@ class Contig:
         return returnSequence
 
     def getSegmentCount(self):
-        return self.paths.getSegmentCount()
-
+        return self.path.getSegmentCount()
 
     def findSegmentLocations(self, s):
-        return self.paths.findSegmentLocations(s)
+        return self.path.findSegmentLocations(s)
 
     def findSegmentLocationsPlusOne(self, s):
-        segmentLocations = self.paths.findSegmentLocations(s)
+        segmentLocations = self.path.findSegmentLocations(s)
         return [x+1 for x in segmentLocations]
+
+    # This function determines the start and end coordinates of each of the
+    # contig's segments, in contig sequence coordinates.  This information is
+    # necessary before we can split a contig.
+    def determineAllSegmentLocations(self, segmentSequences):
+
+        #Create a temporary directory for doing BLAST searches.
+        if not os.path.exists('GetSPAdesContigGraph-temp'):
+            os.makedirs('GetSPAdesContigGraph-temp')
+
+        saveSequenceToFastaFile(self.sequence, self.fullname, 'GetSPAdesContigGraph-temp/contig.fasta')
+
+        # Create a BLAST database for the contig.
+        makeblastdbCommand = ['makeblastdb', '-dbtype', 'nucl', '-in', 'GetSPAdesContigGraph-temp/contig.fasta']
+        p = subprocess.Popen(makeblastdbCommand, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = p.communicate()
+
+        # TO DO: CHECK THAT makesblastdb ran okay
+
+        for i in range(len(self.path.segmentList)):
+            segment = self.path.segmentList[i]
+
+            segmentSequence = segmentSequences[segment]
+            segmentLength = len(segmentSequence)
+
+            saveSequenceToFastaFile(segmentSequence, segment, 'GetSPAdesContigGraph-temp/segment.fasta')
+
+            # BLAST for the segment in the contig
+            sys.stdout.flush()
+            blastnCommand = ['blastn', '-task', 'blastn', '-db', 'GetSPAdesContigGraph-temp/contig.fasta', '-query', 'GetSPAdesContigGraph-temp/segment.fasta', '-outfmt', '6 length pident sstart send qstart qend']
+            p = subprocess.Popen(blastnCommand, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = p.communicate()
+
+            # TO DO: CHECK THAT blastn ran okay
+
+            # Save the alignments in Python objects.
+            alignmentStrings = out.splitlines()
+            blastAlignments = []
+            for alignmentString in alignmentStrings:
+                alignment = BlastAlignment(alignmentString, segmentLength)
+                blastAlignments.append(alignment)
+
+            # Only keep alignments that are very high identity and cover the
+            # vast majority of the query.  The matches will usually be perfect,
+            # but if SPAdes was run with MismatchCorrector, then there can be
+            # some differences.
+            filteredAlignments = []
+            for blastAlignment in blastAlignments:
+                fractionQueryPresent = blastAlignment.getAlignmentQueryLength() / segmentLength
+                if fractionQueryPresent >= 0.999 and blastAlignment.percentIdentity >= 99.9:
+                    filteredAlignments.append(blastAlignment)
+            filteredAlignments.sort()
+
+            # Determine which occurrence of this segment in this path we are
+            # currently on, and use that to identify the correct BLAST
+            # alignment.
+            segmentOccurrencesInPath = self.path.segmentList.count(segment)
+            segmentOccurrencesInPathBefore = self.path.segmentList[:i].count(segment)
+            correctBlastAlignment = filteredAlignments[segmentOccurrencesInPathBefore]
+
+            # TO DO: CHECK HERE TO MAKE SURE THE FILTERED BLAST HITS AND THE SEGMENT OCCURRENCES ARE THE SAME!  IF NOT, I NEED TO INTELLIGENTLY DEAL WITH THE DISCREPANCY!
+
+            # Use the BLAST alignment to determine the query's start and end
+            # coordinates in the contig.
+            segmentStartInContig = correctBlastAlignment.getQueryStartInReference()
+            segmentEndInContig = correctBlastAlignment.getQueryEndInReference()
+            self.path.contigCoordinates[i] = (segmentStartInContig, segmentEndInContig)
+
+            os.remove('GetSPAdesContigGraph-temp/segment.fasta')
+
+        shutil.rmtree('GetSPAdesContigGraph-temp')
+
+
+
+
+
 
 
 
@@ -520,6 +656,7 @@ class Contig:
 class Path:
     def __init__(self, segmentList):
         self.segmentList = segmentList
+        self.contigCoordinates = [(0,0) for i in range(10)]
 
     def getFirstSegment(self):
         return self.segmentList[0]
@@ -542,6 +679,51 @@ class Path:
             if s == self.segmentList[i]:
                 locations.append(i)
         return locations
+
+
+
+
+
+class BlastAlignment:
+
+    def __init__(self, blastString, queryLength):
+        blastStringParts = blastString.split("\t")
+
+        self.percentIdentity = float(blastStringParts[1])
+
+        self.referenceStart = int(blastStringParts[2])
+        self.referenceEnd = int(blastStringParts[3])
+
+        self.queryStart = int(blastStringParts[4])
+        self.queryEnd = int(blastStringParts[5])
+
+        self.queryLength = queryLength
+
+    def getAlignmentQueryLength(self):
+        return self.queryEnd - self.queryStart + 1
+
+    def getQueryStartInReference(self):
+        queryMissingBasesAtStart = self.queryStart - 1
+        return self.referenceStart - queryMissingBasesAtStart
+
+    def getQueryEndInReference(self):
+        queryMissingBasesAtEnd = self.queryLength - self.queryEnd
+        return self.referenceEnd + queryMissingBasesAtEnd
+
+
+    def __lt__(self, other):
+        return self.getQueryStartInReference() < other.getQueryStartInReference()
+
+    def __str__(self):
+        return "reference: " + str(self.referenceStart) + " to " + str(self.referenceEnd) + \
+               ", query: " + str(self.queryStart) + " to " + str(self.queryEnd) + \
+               ", identity: " + str(self.percentIdentity) + "%"
+
+    def __repr__(self):
+        return "reference: " + str(self.referenceStart) + " to " + str(self.referenceEnd) + \
+               ", query: " + str(self.queryStart) + " to " + str(self.queryEnd) + \
+               ", identity: " + str(self.percentIdentity) + "%"
+
 
 
 
