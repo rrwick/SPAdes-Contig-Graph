@@ -40,7 +40,7 @@ def main():
     # If the user chose to prioritise connections, then it is necessary to
     # split contigs which have an internal connection.
     if (args.connection_priority):
-        splitContigs(contigs)
+        contigs = splitContigs(contigs, links)
 
     # Add the links to each contig object, turning the contigs into a graph.
     addLinksToContigs(contigs, links)
@@ -364,7 +364,7 @@ def getReverseComplement(forwardSequence):
 # Specifically, it looks for graph segments which are connected to the end of
 # one contig and occur in the middle of a second contig.  In such cases, the
 # second contig is split to allow for the connection.
-def splitContigs(contigs):
+def splitContigs(contigs, links):
 
     # Compile lists of all graph segments which reside on the ends of contigs.
     contigStartSegments = []
@@ -373,12 +373,69 @@ def splitContigs(contigs):
         contigStartSegments.append(contig.getStartingSegment())
         contigEndSegments.append(contig.getEndingSegment())
 
-    print(contigStartSegments)
-    print(contigEndSegments)
-    quit()
+    # Create a reverse links dictionary, as we'll need that in the next step.
+    reverseLinks = {}
+    for start, ends in links.iteritems():
+        for end in ends:
+            if end not in reverseLinks:
+                reverseLinks[end] = []
+            reverseLinks[end].append(start)
+
+    # Find all graph segments which are connected to these contig-end segments.
+    # These will need to be on contig ends, to allow for these connections.
+    segmentsWhichMustBeOnContigEnds = []
+    for segment in contigStartSegments:
+        if segment in reverseLinks:
+            segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
+    segmentsWhichMustBeOnContigStarts = []
+    for segment in contigEndSegments:
+        if segment in links:
+            segmentsWhichMustBeOnContigStarts.extend(links[segment])
+
+    # Now split any contig which has one of those segments in its middle.
+    newContigs = []
+    for contig in contigs:
+
+        # This will contain the locations at which the contig must be split.
+        # It is a list of integers which are indices for path segments that
+        # must be at the start of the contig.
+        splitPoints = []
+
+        for segment in segmentsWhichMustBeOnContigStarts:
+            splitPoints.extend(contig.findSegmentLocations(segment))
+        for segment in segmentsWhichMustBeOnContigEnds:
+            splitPoints.extend(contig.findSegmentLocationsPlusOne(segment))
+
+        # Remove duplicates and sort split points.
+        splitPoints = sorted(list(set(splitPoints)))
+
+        # If the first split point is zero, then remove it, as there is no need
+        # to split a contig at its start.
+        if splitPoints and splitPoints[0] == 0:
+            splitPoints = splitPoints[1:]
+
+        # If there are splits to be done, then we make the new contigs!
+        if splitPoints:
+            for splitPoint in reversed(splitPoints):
+                contigPart1, contigPart2 = splitContig(contig, splitPoint)
+                newContigs.append(contigPart2)
+                contig = contigPart1
+            newContigs.append(contig)
+
+        # If there weren't any split points, there's nothing to do.  Just add
+        # the contig to the newContigs list and continue.
+        else:
+            newContigs.append(contig)
+
+    return newContigs
 
 
 
+# This function takes a contig and returns two contigs, split at the split
+# point.  The split point is an index for the segment for the segment in the
+# contig's path.
+def splitContig(contig, splitPoint):
+    return
 
 
 
@@ -391,7 +448,6 @@ class Contig:
         self.number = int(nameParts[1])
         self.sequence = sequence
         self.linkedContigs = [] # filled by addLinkedContigs
-        self.paths = [] # Filled by addPaths
 
     def __str__(self):
         return self.fullname
@@ -434,8 +490,22 @@ class Contig:
         returnSequence += sequenceRemaining + '\n'
         return returnSequence
 
+    def getSegmentCount(self):
+        return self.paths.getSegmentCount()
 
 
+    def findSegmentLocations(self, s):
+        return self.paths.findSegmentLocations(s)
+
+    def findSegmentLocationsPlusOne(self, s):
+        segmentLocations = self.paths.findSegmentLocations(s)
+        return [x+1 for x in segmentLocations]
+
+    # def containsSegmentAnywhereButStart(self, segment):
+    #     return self.paths.containsSegmentAnywhereButStart(segment)
+
+    # def containsSegmentAnywhereButEnd(self, segment):
+    #     return self.paths.containsSegmentAnywhereButEnd(segment)
 
 
 
@@ -459,8 +529,44 @@ class Path:
     def __repr__(self):
         return str(self.segmentLists)
 
+    # def containsSegmentAnywhereButStart(self, segment):
+    #     for i in range(len(self.segmentLists)):
+    #         segmentList = self.segmentLists[i]
+    #         for j in range(len(segmentList)):
+    #             if i == 0 and j == 0:
+    #                 continue
+    #             if segmentList[j] == segment:
+    #                 return True
+    #     return False
 
+    # def containsSegmentAnywhereButEnd(self, segment):
+    #     lastI = len(self.segmentLists) - 1
+    #     for i in range(len(self.segmentLists)):
+    #         segmentList = self.segmentLists[i]
+    #         lastJ = len(segmentList) - 1
+    #         for j in range(len(segmentList)):
+    #             if i == lastI and j == lastJ:
+    #                 continue
+    #             if segmentList[j] == segment:
+    #                 return True
+    #     return False
 
+    def getSegmentCount(self):
+        count = 0
+        for segmentList in self.segmentLists:
+            for segment in segmentList:
+                count += 1
+        return count
+
+    def findSegmentLocations(self, s):
+        locations = []
+        i = 0
+        for segmentList in self.segmentLists:
+            for segment in segmentList:
+                if s == segment:
+                    locations.append(i)
+                i += 1
+        return locations
 
 
 
