@@ -203,7 +203,7 @@ def loadPaths(pathFilename):
     pathFile = open(pathFilename, 'r')
 
     contigName = ''
-    pathList = []
+    pathSegments = []
     for line in pathFile:
 
         line = line.strip()
@@ -217,9 +217,9 @@ def loadPaths(pathFilename):
 
             # If a path is currently stored, save it now.
             if len(contigName) > 0:
-                paths[contigName] = Path(pathList)
+                paths[contigName] = Path(pathSegments)
                 contigName = ''
-                pathList = []
+                pathSegments = []
 
             contigName = line
 
@@ -227,17 +227,19 @@ def loadPaths(pathFilename):
         else:
             pathLine = line
 
-            # Trim any semicolon from the end.
+            # Replace a semicolon at the end of a line with a placeholder
+            # segment called 'gap'
             if pathLine[-1] == ';':
                 pathLine = pathLine[0:-1]
+                pathLine += ',gap'
 
             # Add the path to the path list
             if len(pathLine) > 0:
-                pathList.append(pathLine.split(','))
+                pathSegments.extend(pathLine.split(','))
 
     # Save the last contig.
     if len(contigName) > 0:
-        paths[contigName] = Path(pathList)
+        paths[contigName] = Path(pathSegments)
 
     return paths
 
@@ -416,6 +418,7 @@ def splitContigs(contigs, links):
 
         # If there are splits to be done, then we make the new contigs!
         if splitPoints:
+
             for splitPoint in reversed(splitPoints):
                 contigPart1, contigPart2 = splitContig(contig, splitPoint)
                 newContigs.append(contigPart2)
@@ -515,36 +518,29 @@ class Contig:
 
 # This class holds a path: the lists of graph segments making up a contig.
 class Path:
-    def __init__(self, segmentLists):
-        self.segmentLists = segmentLists
+    def __init__(self, segmentList):
+        self.segmentList = segmentList
 
     def getFirstSegment(self):
-        return self.segmentLists[0][0]
+        return self.segmentList[0]
 
     def getLastSegment(self):
-        return self.segmentLists[-1][-1]
+        return self.segmentList[-1]
 
     def __str__(self):
-        return str(self.segmentLists)
+        return str(self.segmentList)
 
     def __repr__(self):
-        return str(self.segmentLists)
+        return str(self.segmentList)
 
     def getSegmentCount(self):
-        count = 0
-        for segmentList in self.segmentLists:
-            for segment in segmentList:
-                count += 1
-        return count
+        return len(segmentList)
 
     def findSegmentLocations(self, s):
         locations = []
-        i = 0
-        for segmentList in self.segmentLists:
-            for segment in segmentList:
-                if s == segment:
-                    locations.append(i)
-                i += 1
+        for i in range(len(self.segmentList)):
+            if s == self.segmentList[i]:
+                locations.append(i)
         return locations
 
 
