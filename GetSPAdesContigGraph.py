@@ -37,6 +37,11 @@ def main():
     # Add the paths to each contig object, so each contig knows its graph path.
     addPathsToContigs(contigs, paths)
 
+    # If the user chose to prioritise connections, then it is necessary to
+    # split contigs which have an internal connection.
+    if (args.connection_priority):
+        splitContigs(contigs)
+
     # Add the links to each contig object, turning the contigs into a graph.
     addLinksToContigs(contigs, links)
 
@@ -272,23 +277,16 @@ def addPathsToContigs(contigs, paths):
 # information to the contigs.
 def addLinksToContigs(contigs, links):
 
-    # First store the first and last graph segments for each contig.
-    for contig in contigs:
-        firstSegment = contig.paths.getFirstSegment()
-        lastSegment = contig.paths.getLastSegment()
-
-        contig.addGraphSegments(firstSegment, lastSegment)
-
-    # Now for each contig, we take the last graph segment, find the segments
-    # that it leads to, and then find the contigs which start with that next
+    # For each contig, we take the last graph segment, find the segments that
+    # it leads to, and then find the contigs which start with that next
     # segment.  These make up the links to the current contig.
     for contig1 in contigs:
-        endingSegment = contig1.endingSegment
+        endingSegment = contig1.getEndingSegment()
         followingSegments = links[endingSegment]
         linkedContigs = []
         for followingSegment in followingSegments:
             for contig2 in contigs:
-                startingSegment = contig2.startingSegment
+                startingSegment = contig2.getStartingSegment()
                 if followingSegment == startingSegment:
                     linkedContigs.append(contig2)
         contig1.addLinkedContigs(linkedContigs)
@@ -362,6 +360,28 @@ def getReverseComplement(forwardSequence):
 
 
 
+# This function splits contigs as necessary to maintain all graph connections.
+# Specifically, it looks for graph segments which are connected to the end of
+# one contig and occur in the middle of a second contig.  In such cases, the
+# second contig is split to allow for the connection.
+def splitContigs(contigs):
+
+    # Compile lists of all graph segments which reside on the ends of contigs.
+    contigStartSegments = []
+    contigEndSegments = []
+    for contig in contigs:
+        contigStartSegments.append(contig.getStartingSegment())
+        contigEndSegments.append(contig.getEndingSegment())
+
+    print(contigStartSegments)
+    print(contigEndSegments)
+    quit()
+
+
+
+
+
+
 # This class holds a contig: its name, sequence and length.
 class Contig:
 
@@ -370,8 +390,6 @@ class Contig:
         nameParts = name.split('_')
         self.number = int(nameParts[1])
         self.sequence = sequence
-        self.startingSegment = ''
-        self.endingSegment = ''
         self.linkedContigs = [] # filled by addLinkedContigs
         self.paths = [] # Filled by addPaths
 
@@ -384,9 +402,11 @@ class Contig:
     def addPaths(self, paths):
         self.paths = paths
 
-    def addGraphSegments(self, startingSegment, endingSegment):
-        self.startingSegment = startingSegment
-        self.endingSegment = endingSegment
+    def getStartingSegment(self):
+        return self.paths.getFirstSegment()
+
+    def getEndingSegment(self):
+        return self.paths.getLastSegment()
 
     def addLinkedContigs(self, linkedContigs):
         self.linkedContigs = linkedContigs
@@ -416,6 +436,12 @@ class Contig:
 
 
 
+
+
+
+
+
+
 # This class holds a path: the lists of graph segments making up a contig.
 class Path:
     def __init__(self, segmentLists):
@@ -432,6 +458,9 @@ class Path:
 
     def __repr__(self):
         return str(self.segmentLists)
+
+
+
 
 
 
