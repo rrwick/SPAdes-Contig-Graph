@@ -503,11 +503,139 @@ def splitContig(contig, splitPoint):
 
 
 
+
+
+
+
+
+
+
+# def getAllPossibleOverlaps(sequence1, sequence2, max)
+
+
+
+
+
+
+# This function figures out what the graph overlap size is.
 def getGraphOverlap(links, segmentSequences):
 
     # TO DO: THIS WHOLE FUNCTION
 
     return 11 #TEMP
+
+    if len(links) == 0:
+        return 0
+
+    shortestSegmentSequence = min(segmentSequences.items())
+
+    print(shortestSegmentSequence)
+    quit()
+
+#     //Determine the overlap for each edge.
+#     QMapIterator<QPair<DeBruijnNode*, DeBruijnNode*>, DeBruijnEdge*> i(m_deBruijnGraphEdges);
+#     while (i.hasNext())
+#     {
+#         i.next();
+#         i.value()->autoDetermineExactOverlap();
+#     }
+
+#     //The expectation here is that most overlaps will be
+#     //the same or from a small subset of possible sizes.
+#     //Edges with an overlap that do not match the most common
+#     //overlap(s) are suspected of having their overlap
+#     //misidentified.  They are therefore rechecked using the
+#     //common ones.
+#     std::vector<int> overlapCounts = makeOverlapCountVector();
+
+#     //Sort the overlaps in order of decreasing numbers of edges.
+#     //I.e. the first overlap size in the vector will be the most
+#     //common overlap, the second will be the second most common,
+#     //etc.
+#     std::vector<int> sortedOverlaps;
+#     int overlapsSoFar = 0;
+#     double fractionOverlapsFound = 0.0;
+#     while (fractionOverlapsFound < 1.0)
+#     {
+#         int mostCommonOverlap = 0;
+#         int mostCommonOverlapCount = 0;
+
+#         //Find the overlap size with the most instances.
+#         for (size_t i = 0; i < overlapCounts.size(); ++i)
+#         {
+#             if (overlapCounts[i] > mostCommonOverlapCount)
+#             {
+#                 mostCommonOverlap = int(i);
+#                 mostCommonOverlapCount = overlapCounts[i];
+#             }
+#         }
+
+#         //Add that overlap to the common collection and remove it from the counts.
+#         sortedOverlaps.push_back(mostCommonOverlap);
+#         overlapsSoFar += mostCommonOverlapCount;
+#         fractionOverlapsFound = double(overlapsSoFar) / edgeCount;
+#         overlapCounts[mostCommonOverlap] = 0;
+#     }
+
+#     //For each edge, see if one of the more common overlaps also works.
+#     //If so, use that instead.
+#     QMapIterator<QPair<DeBruijnNode*, DeBruijnNode*>, DeBruijnEdge*> j(m_deBruijnGraphEdges);
+#     while (j.hasNext())
+#     {
+#         j.next();
+#         DeBruijnEdge * edge = j.value();
+#         for (size_t k = 0; k < sortedOverlaps.size(); ++k)
+#         {
+#             if (edge->getOverlap() == sortedOverlaps[k])
+#                 break;
+#             else if (edge->testExactOverlap(sortedOverlaps[k]))
+#             {
+#                 edge->setOverlap(sortedOverlaps[k]);
+#                 break;
+#             }
+#         }
+#     }
+# }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
