@@ -33,19 +33,33 @@ def main():
     args = getArguments()
 
     # Load in the user-specified files.
+    print("Loading graph...     ", end="")
+    sys.stdout.flush()
     links = loadGraphLinks(args.graph)
+    print("done\nLoading contigs...   ", end="")
+    sys.stdout.flush()
     contigs = loadContigs(args.contigs)
+    print("done\nLoading paths...     ", end="")
+    sys.stdout.flush()
     paths = loadPaths(args.paths)
+    print("done")
+    sys.stdout.flush()
 
-    # Add the paths to each contig object, so each contig knows its graph path.
+    # Add the paths to each contig object, so each contig knows its graph path,
+    # and add the links to each contig object, turning the contigs into a
+    # graph.
+    print("Building graph...    ", end="")
+    sys.stdout.flush()
     addPathsToContigs(contigs, paths)
-
-    # Add the links to each contig object, turning the contigs into a graph.
     addLinksToContigs(contigs, links)
+    print("done")
 
     # If the user chose to prioritise connections, then it is necessary to
     # split contigs which have an internal connection.
     if (args.connection_priority):
+
+        print("Splitting contigs... ", end="")
+        sys.stdout.flush()
 
         if not isBlastInstalled():
             print("Error: could not find BLAST program", file=sys.stderr)
@@ -57,22 +71,27 @@ def main():
 
         # Since the contigs have changed, we need to redo the linking.
         addLinksToContigs(contigs, links)
+        print("done")
 
     # Output the graph to file
+    print("Saving graph...      ", end="")
+    sys.stdout.flush()
     outputFile = open(args.output, 'w')
     for contig in contigs:
         outputFile.write(contig.getHeaderWithLinks())
         outputFile.write(contig.getSequenceWithLineBreaks())
+    print("done")
 
     # If the user asked for a paths file, save that to file too.
     if args.paths_out != '':
+        print("Saving paths...      ", end="")
+        sys.stdout.flush()
         outputPathsFile = open(args.paths_out, 'w')
         for contig in contigs:
             outputPathsFile.write(contig.fullname + '\n')
             outputPathsFile.write(contig.path.getPathsWithLineBreaks())
+        print("done")
         
-
-
 
 
 
@@ -362,8 +381,6 @@ def addLinksToContigs(contigs, links):
 
 
 
-
-
 # This function takes a contig and returns its reverse complement contig.
 def getReverseComplementContig(contig):
 
@@ -539,14 +556,10 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
 
 
 
-
-
 # This function takes a contig and returns two contigs, split at the split
 # point.  The split point is an index for the segment for the segment in the
 # contig's path.
 def splitContig(contig, splitPoint, nextContigNumber):
-
-
 
     # The indices are bit confusing here, as the contigCoordinates are 1-based
     # with an inclusive end (because that's how BLAST does it).  To get to
@@ -578,13 +591,6 @@ def splitContig(contig, splitPoint, nextContigNumber):
     newContig2.addPath(newContig2Path)
 
     return newContig1, newContig2
-
-
-
-
-
-
-
 
 
 
