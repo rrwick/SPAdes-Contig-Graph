@@ -365,9 +365,23 @@ def getReverseComplementContig(contig):
         revCompContigFullname = revCompContigFullname + "'"
 
     revCompSequence = getReverseComplement(contig.sequence)
+    revCompContig = Contig(revCompContigFullname, revCompSequence)
 
-    return Contig(revCompContigFullname, revCompSequence)
+    # Get the path's reverse complement.
+    revCompPath = getReverseComplementPath(contig.path)
+    revCompContig.path = revCompPath
 
+    return revCompContig
+
+
+def getReverseComplementPath(path):
+    revSegmentList = []
+    for segment in reversed(path.segmentList):
+        if segment == 'gap':
+            revSegmentList.append(segment)
+        else:
+            revSegmentList.append(getOppositeSequenceNumber(segment))
+    return Path(revSegmentList)
 
 
 
@@ -449,10 +463,15 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
         if segment in links:
             segmentsWhichMustBeOnContigStarts.extend(links[segment])
 
-    # Now split any contig which has one of those segments in its middle.
-    newContigs = []
+    # Now split any contig which has one of those segments in its middle.  
+    newPositiveContigs = []
     nextContigNumber = 1
     for contig in contigs:
+
+        # We only split positive contigs and will make the negative complement
+        # after we are done.
+        if not contig.isPositive():
+            continue
 
         # This will contain the locations at which the contig must be split.
         # It is a list of integers which are indices for path segments that
@@ -472,25 +491,37 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
         if splitPoints and splitPoints[0] == 0:
             splitPoints = splitPoints[1:]
 
+        # If the last split point is one past the end, then remove it.
+        if splitPoints and splitPoints[-1] == contig.getSegmentCount():
+            splitPoints = splitPoints[:-1]
+
         # If there are splits to be done, then we make the new contigs!
         if splitPoints:
             contig.determineAllSegmentLocations(segmentSequences, graphOverlap)
 
             for splitPoint in reversed(splitPoints):
                 contigPart1, contigPart2 = splitContig(contig, splitPoint, nextContigNumber)
-                newContigs.append(contigPart2)
+                newPositiveContigs.append(contigPart2)
                 contig = contigPart1
                 nextContigNumber += 1
 
-            newContigs.append(contig)
+            newPositiveContigs.append(contig)
 
         # If there weren't any split points, then we don't have to split the
-        # contig, but we do have to renumber it.
+        # contig.
         else:
-            renumberedContig = contig
-            renumberedContig.renumber(nextContigNumber)
-            newContigs.append(renumberedContig)
-            nextContigNumber += 1
+            newPositiveContigs.append(contig)
+
+        # At this point, the last contig added will have a number of 0, so we
+        # need to renumber it.
+        newPositiveContigs[-1].renumber(nextContigNumber)
+        nextContigNumber += 1
+
+    # Now we make the reverse complements for all of our new contigs.
+    newContigs = []
+    for contig in newPositiveContigs:
+        newContigs.append(contig)
+        newContigs.append(getReverseComplementContig(contig))
 
     return newContigs
 
@@ -502,6 +533,8 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
 # point.  The split point is an index for the segment for the segment in the
 # contig's path.
 def splitContig(contig, splitPoint, nextContigNumber):
+
+
 
     # The indices are bit confusing here, as the contigCoordinates are 1-based
     # with an inclusive end (because that's how BLAST does it).  To get to
@@ -523,8 +556,11 @@ def splitContig(contig, splitPoint, nextContigNumber):
     newContig1Name = 'NODE_0_length_' + str(len(newContig1Sequence)) + '_cov_' + str(contig.cov)
     newContig2Name = 'NODE_' + str(nextContigNumber) + '_length_' + str(len(newContig2Sequence)) + '_cov_' + str(contig.cov)
 
+    # The first contig is the one that will potentially be split again, so it
+    # still needs to have contig coordinates in its path.
     newContig1 = Contig(newContig1Name, newContig1Sequence)
     newContig1.addPath(newContig1Path)
+    newContig1.path.contigCoordinates = newContig1PathContigCoordinates
 
     newContig2 = Contig(newContig2Name, newContig2Sequence)
     newContig2.addPath(newContig2Path)
@@ -629,9 +665,13 @@ class Contig:
         self.fullname = name
         nameParts = name.split('_')
         self.number = int(nameParts[1])
-        self.cov = float(nameParts[5])
+        covString = nameParts[5]
+        if covString[-1] == "'":
+            covString = covString[:-1]
+        self.cov = float(covString)
         self.sequence = sequence
         self.linkedContigs = [] # filled by addLinkedContigs
+        self.path = Path()
 
     def __str__(self):
         return self.fullname
@@ -640,8 +680,11 @@ class Contig:
         return self.fullname
 
     def renumber(self, newNumber):
+        positive = self.isPositive()
         self.number = newNumber
         self.fullname = 'NODE_' + str(newNumber) + '_length_' + str(len(self.sequence)) + '_cov_' + str(self.cov)
+        if not positive:
+            self.fullname += "'"
 
     def addPath(self, path):
         self.path = path
@@ -654,6 +697,9 @@ class Contig:
 
     def addLinkedContigs(self, linkedContigs):
         self.linkedContigs = linkedContigs
+
+    def isPositive(self):
+        return self.fullname[-1] != "'"
 
     # This function produces a FASTG header for the contig, with links and a
     # line break at the end.
@@ -794,7 +840,7 @@ class Contig:
 
 # This class holds a path: the lists of graph segments making up a contig.
 class Path:
-    def __init__(self, segmentList):
+    def __init__(self, segmentList = []):
         self.segmentList = segmentList
         self.contigCoordinates = [(0,0) for i in range(len(segmentList))]
 
@@ -811,7 +857,7 @@ class Path:
         return str(self.segmentList) + ', ' + str(self.contigCoordinates) 
 
     def getSegmentCount(self):
-        return len(segmentList)
+        return len(self.segmentList)
 
     def findSegmentLocations(self, s):
         locations = []
