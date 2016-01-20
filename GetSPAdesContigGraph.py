@@ -26,6 +26,7 @@ import os
 import argparse
 import shutil
 import subprocess
+from distutils import spawn
 
 
 def main():
@@ -46,7 +47,9 @@ def main():
     # split contigs which have an internal connection.
     if (args.connection_priority):
 
-        # TO DO: CHECK IF BLAST IS INSTALLED
+        if not isBlastInstalled():
+            print("Error: could not find BLAST program", file=sys.stderr)
+            quit()
 
         segmentSequences = loadGraphSequences(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
@@ -55,22 +58,19 @@ def main():
         # Since the contigs have changed, we need to redo the linking.
         addLinksToContigs(contigs, links)
 
-
-    # Prepare the output.
-    output = []
+    # Output the graph to file
+    outputFile = open(args.output, 'w')
     for contig in contigs:
-        output.append(contig.getHeaderWithLinks())
-        output.append(contig.getSequenceWithLineBreaks())
+        outputFile.write(contig.getHeaderWithLinks())
+        outputFile.write(contig.getSequenceWithLineBreaks())
 
-    # Output to stdout or file, as specified by the user.
-    if args.output != '':
-        outputFile = open(args.output, 'w')
-        for line in output:
-            outputFile.write(line)
-    else:
-        for line in output:
-            print(line, end='')
-
+    # If the user asked for a paths file, save that to file too.
+    if args.paths_out != '':
+        outputPathsFile = open(args.paths_out, 'w')
+        for contig in contigs:
+            outputPathsFile.write(contig.fullname + '\n')
+            outputPathsFile.write(contig.path.getPathsWithLineBreaks())
+        
 
 
 
@@ -82,7 +82,8 @@ def getArguments():
     parser.add_argument('graph', help='The assembly_graph.fastg file made by SPAdes')
     parser.add_argument('contigs', help='A contigs or scaffolds fasta file made by SPAdes')
     parser.add_argument('paths', help='The paths file which corresponds to the contigs or scaffolds file')
-    parser.add_argument('-o', '--output', action='store', help='Save the output graph to this file (default: write graph to stdout)', default='')
+    parser.add_argument('output', help='The graph file made by this program')
+    parser.add_argument('-p', '--paths_out', action='store', help='Save the paths to this file (default: do not save paths)', default='')
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-c', '--connection_priority', action='store_true', help='Prioritise graph connections over segment length')
@@ -91,6 +92,12 @@ def getArguments():
     return parser.parse_args()
 
 
+
+
+def isBlastInstalled():
+    makeblastdbPath = spawn.find_executable('makeblastdb')
+    blastnPath = spawn.find_executable('blastn')
+    return makeblastdbPath != None and blastnPath != None
 
 
 # This function takes a contig filename and returns a list of Contig objects.
@@ -870,6 +877,15 @@ class Path:
             if s == self.segmentList[i]:
                 locations.append(i)
         return locations
+
+    def getPathsWithLineBreaks(self):
+        output = ''
+        for segment in self.segmentList:
+            if segment == 'gap':
+                output += ';\n'
+            else:
+                output += segment + ','
+        return output[:-1] + '\n'
 
 
 
