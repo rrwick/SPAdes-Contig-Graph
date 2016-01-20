@@ -437,14 +437,9 @@ def getReverseComplement(forwardSequence):
 # second contig is split to allow for the connection.
 def splitContigs(contigs, links, segmentSequences, graphOverlap):
 
-    # Compile lists of all graph segments which reside on the ends of contigs.
-    contigStartSegments = []
-    contigEndSegments = []
-    for contig in contigs:
-        contigStartSegments.append(contig.getStartingSegment())
-        contigEndSegments.append(contig.getEndingSegment())
+    contigs2 = contigs
 
-    # Create a reverse links dictionary, as we'll need that in the next step.
+    # Create a reverse links dictionary, as we'll need that in the coming loop.
     reverseLinks = {}
     for start, ends in links.iteritems():
         for end in ends:
@@ -452,18 +447,7 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
                 reverseLinks[end] = []
             reverseLinks[end].append(start)
 
-    # Find all graph segments which are connected to these contig-end segments.
-    # These will need to be on contig ends, to allow for these connections.
-    segmentsWhichMustBeOnContigEnds = []
-    for segment in contigStartSegments:
-        if segment in reverseLinks:
-            segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
-    segmentsWhichMustBeOnContigStarts = []
-    for segment in contigEndSegments:
-        if segment in links:
-            segmentsWhichMustBeOnContigStarts.extend(links[segment])
-
-    # Now split any contig which has one of those segments in its middle.  
+    # Now split contigs, as necessary.
     newPositiveContigs = []
     nextContigNumber = 1
     for contig in contigs:
@@ -473,11 +457,43 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
         if not contig.isPositive():
             continue
 
+        # A contig needs to be split at a particular point if there is a graph
+        # connection to that point which does NOT come from one of the contig's
+        # own segments or from a segment of an already-connected contig.
+        contigsToExclude = []
+        contigsToExclude.append(contig)
+        for contig2 in contigs2:
+            startSeg = contig2.getStartingSegment()
+            endSeg = contig2.getEndingSegment()
+
+            if endSeg in links and contig.getStartingSegment() in links[endSeg]:
+                contigsToExclude.append(contig2)
+            if startSeg in reverseLinks and contig.getEndingSegment() in reverseLinks[startSeg]:
+                contigsToExclude.append(contig2)
+
+        # Compile lists of all segments which reside on the ends of contigs.
+        contigStartSegments = []
+        contigEndSegments = []
+        for contig2 in contigs2:
+            if contig2 not in contigsToExclude:
+                contigStartSegments.append(contig2.getStartingSegment())
+                contigEndSegments.append(contig2.getEndingSegment())
+
+        # Find all graph segments which are connected to these contig-end segments.
+        # These will need to be on contig ends, to allow for these connections.
+        segmentsWhichMustBeOnContigEnds = []
+        for segment in contigStartSegments:
+            if segment in reverseLinks:
+                segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
+        segmentsWhichMustBeOnContigStarts = []
+        for segment in contigEndSegments:
+            if segment in links:
+                segmentsWhichMustBeOnContigStarts.extend(links[segment])
+
         # This will contain the locations at which the contig must be split.
         # It is a list of integers which are indices for path segments that
         # must be at the start of the contig.
         splitPoints = []
-
         for segment in segmentsWhichMustBeOnContigStarts:
             splitPoints.extend(contig.findSegmentLocations(segment))
         for segment in segmentsWhichMustBeOnContigEnds:
