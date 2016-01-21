@@ -606,9 +606,15 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
 
             for splitPoint in reversed(splitPoints):
                 contigPart1, contigPart2 = splitContig(contig, splitPoint, nextContigNumber)
-                newPositiveContigs.append(contigPart2)
-                contig = contigPart1
-                nextContigNumber += 1
+
+                # If the split was successful, then both contigPart1 and
+                # contigPart2 are new Contig objects.  If unsuccessful, then
+                # they are None.
+                if contigPart1 is not None:
+                    newPositiveContigs.append(contigPart2)
+                    contig = contigPart1
+                    nextContigNumber += 1
+
             newPositiveContigs.append(contig)
 
         # If there weren't any split points, then we don't have to split the
@@ -636,19 +642,36 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
 # contig's path.
 def splitContig(contig, splitPoint, nextContigNumber):
 
+    # Determine the new contig paths.
+    newContig1Path = Path(contig.path.segmentList[:splitPoint])
+    newContig2Path = Path(contig.path.segmentList[splitPoint:])
+
+    # Get the coordinates for the new contig paths.
+    newContig1PathContigCoordinates = contig.path.contigCoordinates[:splitPoint]
+    newContig2PathContigCoordinates = contig.path.contigCoordinates[splitPoint:]
+    newContig1FirstSegmentCoordinates = newContig1PathContigCoordinates[0]
+    newContig1LastSegmentCoordinates = newContig1PathContigCoordinates[-1]
+    newContig2FirstSegmentCoordinates = newContig2PathContigCoordinates[0]
+    newContig2LastSegmentCoordinates = newContig2PathContigCoordinates[-1]
+
+    # Check to see if any of the important coordinates are absent, as will be
+    # the case if this program was unable to find the segment in the contig.
+    # In this case, the split fails.
+    if newContig1FirstSegmentCoordinates[0] is None or \
+       newContig1LastSegmentCoordinates[1] is None or \
+       newContig2FirstSegmentCoordinates[0] is None or \
+       newContig2LastSegmentCoordinates[1] is None:
+        return None, None
+
+    # Determine exact coordinate for the new segments.
     # The indices are bit confusing here, as the contigCoordinates are 1-based
     # with an inclusive end (because that's how BLAST does it).  To get to
     # 0-based and exclusive end (for Python), we subtract one from the start.
-    newContig1Path = Path(contig.path.segmentList[:splitPoint])
-    newContig1PathContigCoordinates = contig.path.contigCoordinates[:splitPoint]
-    newContig1SeqStart = newContig1PathContigCoordinates[0][0] - 1
-    newContig1SeqEnd = newContig1PathContigCoordinates[-1][1]
+    newContig1SeqStart = newContig1FirstSegmentCoordinates[0] - 1
+    newContig1SeqEnd = newContig1LastSegmentCoordinates[1]
     newContig1Sequence = contig.sequence[newContig1SeqStart:newContig1SeqEnd]
-
-    newContig2Path = Path(contig.path.segmentList[splitPoint:])
-    newContig2PathContigCoordinates = contig.path.contigCoordinates[splitPoint:]
-    newContig2SeqStart = newContig2PathContigCoordinates[0][0] - 1
-    newContig2SeqEnd = newContig2PathContigCoordinates[-1][1]
+    newContig2SeqStart = newContig2FirstSegmentCoordinates[0] - 1
+    newContig2SeqEnd = newContig2LastSegmentCoordinates[1]
     newContig2Sequence = contig.sequence[newContig2SeqStart:newContig2SeqEnd]
 
     # Give the next contig number to the second piece, as the first one may
@@ -867,24 +890,44 @@ def renumberContigs(contigs):
     return newContigs
 
 
-# This function takes blast alignments and returns the best ones.
-# Specifically, it tries to find the best x alignments, where x is the number
-# in the numberOfAlignmentsToReturn parameter.
-# 'Best' is defined first as covering the entirety of the alignment, and then
-# based on identity.
-def getBestBlastAlignments(blastAlignments, segmentLength, numberOfAlignmentsToReturn):
+# This function takes blast alignments and returns the best one.
+# 'Best' is defined first as covering the entirety of the alignment, being high
+# identity and having an appropriate start position.
+def getBestBlastAlignment(blastAlignments, segmentLength, expectedReferenceStart):
 
-    if numberOfAlignmentsToReturn > len(blastAlignments):
-        print('\nError: unable to find graph segment sequence in contig', file=sys.stderr)
-        quit()
+    if not blastAlignments:
+        return None
 
+    # Sort by alignment length and identity.
     sortedAlignments = sorted(blastAlignments, key=lambda alignment: (alignment.getQueryLength(), alignment.percentIdentity), reverse=True)
 
-    bestAlignments = sortedAlignments[:numberOfAlignmentsToReturn]
+    # If we have an expected reference start to work with, then we find the
+    # first alignment in the list which occurs very near the expected reference
+    # start.
+    if expectedReferenceStart is not None:
+        for alignment in sortedAlignments:
+            discrepancy = abs(alignment.getQueryStartInReference() - expectedReferenceStart)
+            if discrepancy < 5:
+                return alignment
 
-    # Sort the alignments by their start position in the reference.
-    bestAlignments.sort()
-    return bestAlignments
+    # If we don't have an expected reference start to work with, then we are
+    # more limited.  We can only give a result if there is a single full length
+    # alignment.
+    else:
+        fullLengthAlignments = []
+        for alignment in sortedAlignments:
+            fractionPresent = alignment.getQueryLength() / segmentLength
+            if fractionPresent == 1.0:
+                fullLengthAlignments.append(alignment)
+        if len(fullLengthAlignments) == 1:
+            return fullLengthAlignments[0]
+
+    # If the code got here, then no good match was found.
+    return None
+
+
+
+
 
 
 
@@ -1000,6 +1043,11 @@ class Contig:
             print(err, file=sys.stderr)
             quit()
 
+        # This value tracks where we expect the next segment to start, in
+        # contig coordinates.  When it is set to None, that means we don't
+        # know.
+        expectedSegmentStartInContig = 1
+        
         for i in range(len(self.path.segmentList)):
             segment = self.path.segmentList[i]
 
@@ -1007,6 +1055,7 @@ class Contig:
             # start/end coordinates after we've finished with the real
             # segments.
             if segment.startswith('gap'):
+                expectedSegmentStartInContig = None
                 continue
 
             segmentSequence = segmentSequences[segment]
@@ -1033,41 +1082,37 @@ class Contig:
                 alignment = BlastAlignment(alignmentString, segmentLength)
                 blastAlignments.append(alignment)
 
-            # Only keep alignments that are very high identity and cover the
-            # vast majority of the query.  The matches will usually be perfect,
-            # but if SPAdes was run with MismatchCorrector, then there can be
-            # some differences.
-            segmentOccurrencesInPath = self.path.segmentList.count(segment)
-            bestAlignments = getBestBlastAlignments(blastAlignments, segmentLength, segmentOccurrencesInPath)
+            # Get the alignment (if any) that best matches the segment sequence
+            # and position.
+            bestAlignment = getBestBlastAlignment(blastAlignments, segmentLength, expectedSegmentStartInContig)
 
-            # Determine which occurrence of this segment in this path we are
-            # currently on, and use that to identify the correct BLAST
-            # alignment.
-            segmentOccurrencesInPathBefore = self.path.segmentList[:i].count(segment)
-            correctBlastAlignment = bestAlignments[segmentOccurrencesInPathBefore]
+            # If we found an alignment, use it to determine the query's start
+            # and end coordinates in the contig.
+            if bestAlignment is not None:
+                segmentStartInContig = bestAlignment.getQueryStartInReference()
+                segmentEndInContig = bestAlignment.getQueryEndInReference()
 
-            # Use the BLAST alignment to determine the query's start and end
-            # coordinates in the contig.
-            segmentStartInContig = correctBlastAlignment.getQueryStartInReference()
-            segmentEndInContig = correctBlastAlignment.getQueryEndInReference()
+            # If we failed to find an alignment, then we don't have segment
+            # coordinates and will be unable to split the contig at this point.
+            else:
+                segmentStartInContig = None
+                segmentEndInContig = None
+
             self.path.contigCoordinates[i] = (segmentStartInContig, segmentEndInContig)
+
+            # Update the expected segment start for the next segment.
+            # Hopefully we can use the alignment to do this precisely.
+            if bestAlignment is not None:
+                expectedSegmentStartInContig = (bestAlignment.referenceEnd - graphOverlap + 1)
+
+            # If there is no alignment with which we can predict the next
+            # segment start, we can guess using the segment length.
+            elif expectedSegmentStartInContig is not None:
+                expectedSegmentStartInContig += (segmentLength - graphOverlap)
 
             os.remove('GetSPAdesContigGraph-temp/segment.fasta')
 
         shutil.rmtree('GetSPAdesContigGraph-temp')
-
-        # Double check that the segmentStartCoordinates are strictly
-        # increasing.  If not, something went wrong!
-        lastStart = 0
-        for i in range(len(self.path.segmentList)):
-            segment = self.path.segmentList[i]
-            if segment.startswith('gap'):
-                continue
-            start = self.path.contigCoordinates[i][0]
-            if start < lastStart:
-                print('\nError: unable to find graph segment sequence in contig', file=sys.stderr)
-                quit()
-            lastStart = start
 
         # Now we have to go back and assign contig start/end positions for any
         # gap segments.
@@ -1081,14 +1126,22 @@ class Contig:
             gapEndInContig = len(self.sequence)
 
             if i > 0:
-                gapStartInContig = self.path.contigCoordinates[i - 1][1] - graphOverlap + 1
-            if i < segmentCount - 1:
-                gapEndInContig = self.path.contigCoordinates[i + 1][0] + graphOverlap - 1
+                previousSegmentEnd = self.path.contigCoordinates[i - 1][1]
+                if previousSegmentEnd is not None:
+                    gapStartInContig = previousSegmentEnd - graphOverlap + 1
+                    if gapStartInContig < 1:
+                        gapStartInContig = 1
+                else:
+                    gapStartInContig = None
 
-            if gapStartInContig < 1:
-                gapStartInContig = 1
-            if gapStartInContig > len(self.sequence):
-                gapStartInContig = len(self.sequence)
+            if i < segmentCount - 1:
+                nextSegmentStart = self.path.contigCoordinates[i + 1][0]
+                if nextSegmentStart is not None:
+                    gapEndInContig = nextSegmentStart + graphOverlap - 1
+                    if gapEndInContig > len(self.sequence):
+                        gapEndInContig = len(self.sequence)
+                else:
+                    gapEndInContig = None
 
             self.path.contigCoordinates[i] = (gapStartInContig, gapEndInContig)
 
@@ -1213,6 +1266,9 @@ class BlastAlignment:
 
     def getQueryLength(self):
         return self.queryEnd - self.queryStart + 1
+
+    def getReferenceLength(self):
+        return self.referenceEnd - self.referenceStart + 1
 
     def getQueryStartInReference(self):
         queryMissingBasesAtStart = self.queryStart - 1
