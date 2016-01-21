@@ -54,17 +54,16 @@ def main():
     addLinksToContigs(contigs, links)
     print("done")
 
-    # If the user chose to prioritise connections, then a number of graph
+    # If the user chose to prioritise connections, then some graph
     # modifications are carried out.
     if (args.connection_priority):
-
-        print("Splitting contigs... ", end="")
-        sys.stdout.flush()
 
         if not isBlastInstalled():
             print("Error: could not find BLAST program", file=sys.stderr)
             quit()
 
+        print("Splitting contigs... ", end="")
+        sys.stdout.flush()
         segmentSequences = loadGraphSequences(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
@@ -387,7 +386,6 @@ def addLinksToContigs(contigs, links):
                 if followingSegment == startingSegment:
                     contig1.outgoingLinkedContigs.append(contig2)
                     contig2.incomingLinkedContigs.append(contig1)
-                    break
 
 
 
@@ -708,16 +706,23 @@ def linkIsBetweenContigs(start, end, contigs):
                 return True
     return False
 
-# This function returns a set of tuples that are the links in the graph.
-def getAllLinksInGraph(contigs):
+# This function returns a set of tuples that contains all graph links for the
+# given set of contigs.
+def getAllLinksBetweenContigs(contigs):
     linkSet = set()
-    for contig in contigs:
-        linksInContig = contig.path.getAllLinks()
+    for contig1 in contigs:
+        linksInContig = contig1.path.getAllLinks()
         for linkInContig in linksInContig:
             linkSet.add(linkInContig)
-        linksBetweenContigs = contig.getLinksToOtherContigs()
-        for linkBetweenContigs in linksBetweenContigs:
-            linkSet.add(linkBetweenContigs)
+
+        downstreamContigs = contig1.outgoingLinkedContigs
+        upstreamContigs = contig1.incomingLinkedContigs
+        for contig2 in contigs:
+            if contig2 in downstreamContigs:
+                linkSet.add((contig1.getEndingSegment(), contig2.getStartingSegment()))
+            if contig2 in upstreamContigs:
+                linkSet.add((contig2.getEndingSegment(), contig1.getStartingSegment()))
+
     return linkSet
 
 
@@ -728,15 +733,6 @@ def getAllLinksInGraph(contigs):
 # contig is contained entirely within another.  However, a contig will not be
 # removed, even if it is a duplicate, if removing it would 
 def removeDuplicateContigs(contigs):
-
-    #TEMP
-    for contig in contigs:
-        print(contig.getNumberWithSign())
-        print(contig.path.segmentList)
-        print(contig.incomingLinkedContigs)
-        print(contig.outgoingLinkedContigs)
-        print()
-    quit()
 
     # Sort the contigs from big to small.  This ensures that containing contigs
     # will be encountered before contained contigs.
@@ -753,31 +749,21 @@ def removeDuplicateContigs(contigs):
         else:
             contigsNoDuplicates.append(contig1)
 
-    print(duplicateContigs) #TEMP
-
     # For each duplicate contig, assess whether it really does need to be
     # included because of the links it provides.
     # We do this by checking the graph links to and from this contig and seeing
     # if those links are present in the rest of the graph.  If not, the contig
     # must be included.
-    allLinksInGraph = getAllLinksInGraph(contigsNoDuplicates)
-
     for duplicateContig in duplicateContigs:
+        allLinksInGraph = getAllLinksBetweenContigs(contigsNoDuplicates)
+
         linksInContig = duplicateContig.path.getAllLinks()
         linksInContig.extend(duplicateContig.getLinksToOtherContigs())
 
         for linkInContig in linksInContig:
             if linkInContig not in allLinksInGraph:
                 contigsNoDuplicates.append(duplicateContig)
-                print("Contig", duplicateContig.getNumberWithSign(), "must be included") #TEMP
                 break;
-        else: #TEMP
-            print("Contig", duplicateContig.getNumberWithSign(), "is okay to remove") #TEMP
-
-
-
-
-    quit()
 
     return contigsNoDuplicates
 
