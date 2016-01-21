@@ -33,13 +33,13 @@ def main():
     args = getArguments()
 
     # Load in the user-specified files.
-    print("Loading graph...       ", end="")
+    print("Loading graph......... ", end="")
     sys.stdout.flush()
     links = loadGraphLinks(args.graph)
-    print("done\nLoading contigs...     ", end="")
+    print("done\nLoading contigs....... ", end="")
     sys.stdout.flush()
     contigs = loadContigs(args.contigs)
-    print("done\nLoading paths...       ", end="")
+    print("done\nLoading paths......... ", end="")
     sys.stdout.flush()
     paths = loadPaths(args.paths)
     print("done")
@@ -48,7 +48,7 @@ def main():
     # Add the paths to each contig object, so each contig knows its graph path,
     # and add the links to each contig object, turning the contigs into a
     # graph.
-    print("Building graph...      ", end="")
+    print("Building graph........ ", end="")
     sys.stdout.flush()
     addPathsToContigs(contigs, paths)
     addLinksToContigs(contigs, links)
@@ -62,7 +62,7 @@ def main():
             print("Error: could not find BLAST program", file=sys.stderr)
             quit()
 
-        print("Splitting contigs...   ", end="")
+        print("Splitting contigs..... ", end="")
         sys.stdout.flush()
         segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
@@ -76,7 +76,7 @@ def main():
         addLinksToContigs(contigs, links)
         print("done")
 
-        print("Calculating depth...   ", end="")
+        print("Calculating depth..... ", end="")
         sys.stdout.flush()
         recalculateContigDepths(contigs, segmentSequences, segmentDepths, graphOverlap)
         print("done")
@@ -87,11 +87,8 @@ def main():
         addLinksToContigs(contigs, links)
         print("done")
 
-
-
-
     # Output the graph to file
-    print("Saving graph...        ", end="")
+    print("Saving graph.......... ", end="")
     sys.stdout.flush()
     outputFile = open(args.output, 'w')
     for contig in contigs:
@@ -101,7 +98,7 @@ def main():
 
     # If the user asked for a paths file, save that to file too.
     if args.paths_out != '':
-        print("Saving paths...        ", end="")
+        print("Saving paths.......... ", end="")
         sys.stdout.flush()
         outputPathsFile = open(args.paths_out, 'w')
         for contig in contigs:
@@ -781,7 +778,7 @@ def removeDuplicateContigs(contigs):
         for linkInContig in linksInContig:
             if linkInContig not in allLinksInGraph:
                 contigsNoDuplicates.append(duplicateContig)
-                break;
+                break
 
     return contigsNoDuplicates
 
@@ -952,7 +949,11 @@ class Contig:
         p = subprocess.Popen(makeblastdbCommand, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = p.communicate()
 
-        # TO DO: CHECK THAT makesblastdb ran okay
+        # Check that makeblastdb ran okay
+        if len(err) > 0:
+            print('\nmakeblastdb encountered an error:', file=sys.stderr)
+            print(err, file=sys.stderr)
+            quit()
 
         for i in range(len(self.path.segmentList)):
             segment = self.path.segmentList[i]
@@ -974,7 +975,11 @@ class Contig:
             p = subprocess.Popen(blastnCommand, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = p.communicate()
 
-            # TO DO: CHECK THAT blastn ran okay
+            # Check that blastn ran okay
+            if len(err) > 0:
+                print('\nblastn encountered an error:', file=sys.stderr)
+                print(err, file=sys.stderr)
+                quit()
 
             # Save the alignments in Python objects.
             alignmentStrings = out.splitlines()
