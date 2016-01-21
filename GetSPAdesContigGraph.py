@@ -64,7 +64,7 @@ def main():
 
         print("Splitting contigs... ", end="")
         sys.stdout.flush()
-        segmentSequences = loadGraphSequences(args.graph)
+        segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
         addLinksToContigs(contigs, links)
@@ -75,6 +75,12 @@ def main():
         contigs = removeDuplicateContigs(contigs)
         addLinksToContigs(contigs, links)
         print("done")
+
+        print("Calculating depth...   ", end="")
+        sys.stdout.flush()
+        recalculateContigDepths(contigs, segmentSequences, segmentDepths, graphOverlap)
+        print("done")
+
 
 
     # Output the graph to file
@@ -232,18 +238,24 @@ def loadGraphLinks(graphFilename):
 
 
 
-# This function takes a graph filename and returns a dictionary of the graph
-# sequences.
-# The dictionary key is the graph segment names.
-# The dictionary value is the graph segment sequence string.
-def loadGraphSequences(graphFilename):
+# This function takes a graph filename and returns two dictionaries:
+#  Graph sequences:
+#     The dictionary key is the graph segment names.
+#     The dictionary value is the graph segment sequence string.
+#  Graph depth:
+#     The dictionary key is the graph segment names.
+#     The dictionary value is the graph segment read depth (cov).
+def loadGraphSequencesAndDepths(graphFilename):
 
     sequences = {}
+    depths = {}
 
     graphFile = open(graphFilename, 'r')
 
     name = ''
     sequence = ''
+    depth = 1.0
+
     for line in graphFile:
 
         strippedLine = line.strip()
@@ -258,15 +270,18 @@ def loadGraphSequences(graphFilename):
             # If a sequence is currently stored, save it now.
             if len(name) > 0:
                 sequences[name] = sequence
+                depths[name] = depth
+
                 name = ''
                 sequence = ''
+                depth = 1.0
 
             if strippedLine[-1] == ';':
                 strippedLine = strippedLine[:-1]
 
             lineParts = strippedLine.split(':')
             segmentFullName = lineParts[0]
-            name = getNumberFromFullSequenceName(segmentFullName)
+            name, depth = getNumberAndDepthFromFullSequenceName(segmentFullName)
 
         # If not a header line, we assume this is a sequence line.
         else:
@@ -275,8 +290,9 @@ def loadGraphSequences(graphFilename):
     # Save the last contig.
     if len(name) > 0:
         sequences[name] = sequence
+        depths[name] = depth
 
-    return sequences
+    return sequences, depths
 
 
 
@@ -335,14 +351,31 @@ def loadPaths(pathFilename):
 
 
 
-
 def getNumberFromFullSequenceName(fullSequenceName):
-    number = fullSequenceName.split('_')[1]
+    nameParts = fullSequenceName.split('_')
+    number = nameParts[1]
     if fullSequenceName[-1] == "'":
         number += '-'
     else:
         number += '+'
+
     return number
+
+
+def getNumberAndDepthFromFullSequenceName(fullSequenceName):
+    nameParts = fullSequenceName.split('_')
+    number = nameParts[1]
+    if fullSequenceName[-1] == "'":
+        number += '-'
+    else:
+        number += '+'
+
+    depthString = nameParts[5]
+    if depthString[-1] == "'":
+        depthString = depthString[:-1]
+    depth = float(depthString)
+
+    return number, depth
 
 
 
@@ -586,7 +619,7 @@ def splitContig(contig, splitPoint, nextContigNumber):
     newContig2Sequence = contig.sequence[newContig2SeqStart:newContig2SeqEnd]
 
     # Give the next contig number to the second piece, as the first one may
-    # have to be split further.  It will be renumber, if necessary, later.
+    # have to be split further.  It will be renumbered, if necessary, later.
     newContig1Name = 'NODE_0_length_' + str(len(newContig1Sequence)) + '_cov_' + str(contig.cov)
     newContig2Name = 'NODE_' + str(nextContigNumber) + '_length_' + str(len(newContig2Sequence)) + '_cov_' + str(contig.cov)
 
@@ -747,6 +780,37 @@ def removeDuplicateContigs(contigs):
 
 
 
+# This function recalculates contig depths using the depths of the graph
+# segments which make up the contigs.
+# For this function I tried to copy what SPAdes does: it seems to define a
+# contig's depth as the weighted average of the graph segments in the contig.
+# The weight for the average is the segment length minus the overlap.
+# Notably, SPAdes does not seem to divide up the available depth for a segment
+# which appears in multiple places in the contigs, so I don't do that either.
+def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
+
+    for contig in contigs:
+        segmentLengths = []
+        segmentDepths = []
+
+        totalLength = 0
+        totalDepthTimesLength = 0.0
+        for segment in contig.path.segmentList:
+            depth = depths[segment]
+            adjustedDepth = depth
+            length = len(sequences[segment])
+            adjustedLength = length - graphOverlap
+            totalLength += adjustedLength
+            totalDepthTimesLength += adjustedDepth * adjustedLength
+        if totalLength > 0:
+            finalDepth = totalDepthTimesLength / totalLength
+            contig.cov = finalDepth
+            contig.rebuildFullName()
+
+
+
+
+
 
 
 
@@ -779,9 +843,12 @@ class Contig:
         return self.fullname
 
     def renumber(self, newNumber):
-        positive = self.isPositive()
         self.number = newNumber
-        self.fullname = 'NODE_' + str(newNumber) + '_length_' + str(len(self.sequence)) + '_cov_' + str(self.cov)
+        self.rebuildFullName()
+
+    def rebuildFullName(self):
+        positive = self.isPositive()
+        self.fullname = 'NODE_' + str(self.number) + '_length_' + str(len(self.sequence)) + '_cov_' + str(self.cov)
         if not positive:
             self.fullname += "'"
 
@@ -1034,6 +1101,7 @@ class Path:
             s2 = self.segmentList[i + 1]
             links.append((s1,s2))
         return links
+
 
 
 
