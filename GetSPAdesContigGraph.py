@@ -1031,6 +1031,19 @@ class Contig:
 
         shutil.rmtree('GetSPAdesContigGraph-temp')
 
+        # Double check that the segmentStartCoordinates are strictly
+        # increasing.  If not, something went wrong!
+        lastStart = 0
+        for i in range(len(self.path.segmentList)):
+            segment = self.path.segmentList[i]
+            if segment == 'gap':
+                continue
+            start = self.path.contigCoordinates[i][0]
+            if start < lastStart:
+                print('\nError: unable to find graph segment sequence in contig', file=sys.stderr)
+                quit()
+            lastStart = start
+
         # Now we have to go back and assign contig start/end positions for any
         # gap segments.
         segmentCount = len(self.path.segmentList)
