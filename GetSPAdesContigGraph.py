@@ -41,9 +41,8 @@ def main():
     contigs = loadContigs(args.contigs)
     print("done\nLoading paths......... ", end="")
     sys.stdout.flush()
-    paths = loadPaths(args.paths)
+    paths = loadPaths(args.paths, links)
     print("done")
-    sys.stdout.flush()
 
     # Add the paths to each contig object, so each contig knows its graph path,
     # and add the links to each contig object, turning the contigs into a
@@ -305,7 +304,7 @@ def loadGraphSequencesAndDepths(graphFilename):
 # This function takes a path filename and returns a dictionary.
 # The dictionary key is the contig name.
 # The dictionary value is a Path object.
-def loadPaths(pathFilename):
+def loadPaths(pathFilename, links):
 
     paths = {}
 
@@ -343,10 +342,14 @@ def loadPaths(pathFilename):
             pathLine = line
 
             # Replace a semicolon at the end of a line with a placeholder
-            # segment called 'gap'
+            # segment called 'gap_SEG' where SEG will be the name of the
+            # preceding segment.
             if pathLine[-1] == ';':
                 pathLine = pathLine[0:-1]
-                pathLine += ',gap'
+                if contigNumber.endswith('+'):
+                    pathLine += ',gap_POS'
+                else:
+                    pathLine += ',gap_NEG'
 
             # Add the path to the path list
             if len(pathLine) > 0:
@@ -355,6 +358,30 @@ def loadPaths(pathFilename):
     # Save the last contig.
     if len(contigNumber) > 0:
         paths[contigNumber] = Path(pathSegments)
+
+    # Now we go through the paths and rename our gap segments.  Anything named
+    # gap_POS will get the name of the preceding path segment.  Anything named
+    # gap_NEG will get the name of the following path segment.
+    for contigName, path in paths.iteritems():
+        for i in range(len(path.segmentList)):
+            segment = path.segmentList[i]
+            if segment == 'gap_POS':
+                path.segmentList[i] = 'gap_' + path.segmentList[i-1]
+            elif segment == 'gap_NEG':
+                path.segmentList[i] = 'gap_' + path.segmentList[i+1]
+
+    # Now we must go through all of the paths we just made and add any links
+    # for new gap segments.
+    for contigName, path in paths.iteritems():
+        for i in range(len(path.segmentList) - 1):
+            j = i + 1
+            s1 = path.segmentList[i]
+            s2 = path.segmentList[j]
+            if s1.startswith('gap') or s2.startswith('gap'):
+                if s1 in links:
+                    links[s1].append(s2)
+                else:
+                    links[s1] = [s2]
 
     return paths
 
@@ -457,10 +484,7 @@ def getReverseComplementContig(contig):
 def getReverseComplementPath(path):
     revSegmentList = []
     for segment in reversed(path.segmentList):
-        if segment == 'gap':
-            revSegmentList.append(segment)
-        else:
-            revSegmentList.append(getOppositeSequenceNumber(segment))
+        revSegmentList.append(getOppositeSequenceNumber(segment))
     return Path(revSegmentList)
 
 
@@ -585,7 +609,6 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
                 newPositiveContigs.append(contigPart2)
                 contig = contigPart1
                 nextContigNumber += 1
-
             newPositiveContigs.append(contig)
 
         # If there weren't any split points, then we don't have to split the
@@ -806,6 +829,8 @@ def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
         totalLength = 0
         totalDepthTimesLength = 0.0
         for segment in contig.path.segmentList:
+            if segment.startswith('gap'):
+                continue
             depth = depths[segment]
             adjustedDepth = depth
             length = len(sequences[segment])
@@ -981,7 +1006,7 @@ class Contig:
             # Don't deal with assembly gaps just yet - we'll give them contig
             # start/end coordinates after we've finished with the real
             # segments.
-            if segment == "gap":
+            if segment.startswith('gap'):
                 continue
 
             segmentSequence = segmentSequences[segment]
@@ -1036,7 +1061,7 @@ class Contig:
         lastStart = 0
         for i in range(len(self.path.segmentList)):
             segment = self.path.segmentList[i]
-            if segment == 'gap':
+            if segment.startswith('gap'):
                 continue
             start = self.path.contigCoordinates[i][0]
             if start < lastStart:
@@ -1049,7 +1074,7 @@ class Contig:
         segmentCount = len(self.path.segmentList)
         for i in range(segmentCount):
             segment = self.path.segmentList[i]
-            if segment != 'gap':
+            if not segment.startswith('gap'):
                 continue
 
             gapStartInContig = 1
@@ -1135,7 +1160,7 @@ class Path:
     def getPathsWithLineBreaks(self):
         output = ''
         for segment in self.segmentList:
-            if segment == 'gap':
+            if segment.startswith('gap'):
                 output += ';\n'
             else:
                 output += segment + ','
