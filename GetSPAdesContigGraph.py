@@ -474,43 +474,23 @@ def getReverseComplement(forwardSequence):
 # second contig is split to allow for the connection.
 def splitContigs(contigs, links, segmentSequences, graphOverlap):
 
-    # # Create a reverse links dictionary.
-    # reverseLinks = {}
-    # for start, ends in links.iteritems():
-    #     for end in ends:
-    #         if end not in reverseLinks:
-    #             reverseLinks[end] = []
-    #         reverseLinks[end].append(start)
-
-    # # Compile lists of all segments which reside on contigs dead ends.
-    # deadEndEndSegments = []
-    # deadEndStartSegments = []
-    # for contig in contigs:
-    #     if not contig.linkedContigs:
-    #         deadEndEnd = contig.getEndingSegment()
-    #         deadEndEndSegments.append(deadEndEnd)
-    #         deadEndStartSegments.append(getOppositeSequenceNumber(deadEndEnd))
-
-    # # Find all graph segments which are connected to these dead end segments.
-    # # These will need to be on contig ends, to allow for these connections.
-    # segmentsWhichMustBeOnContigEnds = []
-    # for segment in deadEndStartSegments:
-    #     if segment in reverseLinks:
-    #         segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
-    # segmentsWhichMustBeOnContigStarts = []
-    # for segment in deadEndEndSegments:
-    #     if segment in links:
-    #         segmentsWhichMustBeOnContigStarts.extend(links[segment])
-
     # Find all missing links.  A missing link is defined as a link in the
     # assembly graph which is not represented somewhere in the contig graph.
     # 'Represented somewhere' includes both within a contig and between two
     # linked contigs.
-    missingLinks = []
+    linksInContigs = set()
+    for contig in contigs:
+        linksInContig = contig.getLinksInThisContigAndToOtherContigs()
+        for link in linksInContig:
+            linksInContigs.add(link)
+    allGraphLinks = set()
     for start, ends in links.iteritems():
         for end in ends:
-            if (not linkIsInContigs(start, end, contigs)) and (not linkIsBetweenContigs(start, end, contigs)):
-                missingLinks.append((start,end))
+            allGraphLinks.add((start,end))
+    missingLinks = []
+    for graphLink in allGraphLinks:
+        if graphLink not in linksInContigs:
+            missingLinks.append(graphLink)
 
     # In order for these links to be present in the graph, we need to split
     # contigs such that the start segments of missing links are on the ends
@@ -757,9 +737,7 @@ def removeDuplicateContigs(contigs):
     for duplicateContig in duplicateContigs:
         allLinksInGraph = getAllLinksBetweenContigs(contigsNoDuplicates)
 
-        linksInContig = duplicateContig.path.getAllLinks()
-        linksInContig.extend(duplicateContig.getLinksToOtherContigs())
-
+        linksInContig = duplicateContig.getLinksInThisContigAndToOtherContigs()
         for linkInContig in linksInContig:
             if linkInContig not in allLinksInGraph:
                 contigsNoDuplicates.append(duplicateContig)
@@ -985,6 +963,12 @@ class Contig:
         for incomingLinkedContig in self.incomingLinkedContigs:
             linksToOtherContigs.append((incomingLinkedContig.getEndingSegment(), self.getStartingSegment()))
         return linksToOtherContigs
+
+    def getLinksInThisContigAndToOtherContigs(self):
+        links = self.path.getAllLinks()
+        links.extend(self.getLinksToOtherContigs())
+        return links
+
 
 
 
