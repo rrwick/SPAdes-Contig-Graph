@@ -311,7 +311,7 @@ def loadPaths(pathFilename):
 
     pathFile = open(pathFilename, 'r')
 
-    contigName = ''
+    contigNumber = ''
     pathSegments = []
     for line in pathFile:
 
@@ -325,12 +325,18 @@ def loadPaths(pathFilename):
         if len(line) > 3 and line[0:4] == 'NODE':
 
             # If a path is currently stored, save it now.
-            if len(contigName) > 0:
-                paths[contigName] = Path(pathSegments)
-                contigName = ''
+            if len(contigNumber) > 0:
+                paths[contigNumber] = Path(pathSegments)
+                contigNumber = ''
                 pathSegments = []
 
-            contigName = line
+            positive = line[-1] != "'"
+            lineParts = line.split('_')
+            contigNumber = lineParts[1]
+            if positive:
+                contigNumber += '+'
+            else:
+                contigNumber += '-'
 
         # If not a node name line, we assume this is a path line.
         else:
@@ -347,8 +353,8 @@ def loadPaths(pathFilename):
                 pathSegments.extend(pathLine.split(','))
 
     # Save the last contig.
-    if len(contigName) > 0:
-        paths[contigName] = Path(pathSegments)
+    if len(contigNumber) > 0:
+        paths[contigNumber] = Path(pathSegments)
 
     return paths
 
@@ -396,7 +402,7 @@ def getOppositeSequenceNumber(number):
 # knows its graph path.
 def addPathsToContigs(contigs, paths):
     for contig in contigs:
-        contig.addPath(paths[contig.fullname])
+        contig.addPath(paths[contig.getNumberWithSign()])
 
 
 
@@ -836,10 +842,24 @@ def renumberContigs(contigs):
     return newContigs
 
 
+# This function takes blast alignments and returns the best ones.
+# Specifically, it tries to find the best x alignments, where x is the number
+# in the numberOfAlignmentsToReturn parameter.
+# 'Best' is defined first as covering the entirety of the alignment, and then
+# based on identity.
+def getBestBlastAlignments(blastAlignments, segmentLength, numberOfAlignmentsToReturn):
 
+    if numberOfAlignmentsToReturn > len(blastAlignments):
+        print('\nError: unable to find graph segment sequence in contig', file=sys.stderr)
+        quit()
 
+    sortedAlignments = sorted(blastAlignments, key=lambda alignment: (alignment.getQueryLength(), alignment.percentIdentity), reverse=True)
 
+    bestAlignments = sortedAlignments[:numberOfAlignmentsToReturn]
 
+    # Sort the alignments by their start position in the reference.
+    bestAlignments.sort()
+    return bestAlignments
 
 
 
@@ -992,21 +1012,14 @@ class Contig:
             # vast majority of the query.  The matches will usually be perfect,
             # but if SPAdes was run with MismatchCorrector, then there can be
             # some differences.
-            filteredAlignments = []
-            for blastAlignment in blastAlignments:
-                fractionQueryPresent = blastAlignment.getAlignmentQueryLength() / segmentLength
-                if fractionQueryPresent >= 0.999 and blastAlignment.percentIdentity >= 99.9:
-                    filteredAlignments.append(blastAlignment)
-            filteredAlignments.sort()
-
             segmentOccurrencesInPath = self.path.segmentList.count(segment)
-            # TO DO: CHECK HERE TO MAKE SURE THE FILTERED BLAST HITS AND THE SEGMENT OCCURRENCES ARE THE SAME!  IF NOT, I NEED TO INTELLIGENTLY DEAL WITH THE DISCREPANCY!
+            bestAlignments = getBestBlastAlignments(blastAlignments, segmentLength, segmentOccurrencesInPath)
 
             # Determine which occurrence of this segment in this path we are
             # currently on, and use that to identify the correct BLAST
             # alignment.
             segmentOccurrencesInPathBefore = self.path.segmentList[:i].count(segment)
-            correctBlastAlignment = filteredAlignments[segmentOccurrencesInPathBefore]
+            correctBlastAlignment = bestAlignments[segmentOccurrencesInPathBefore]
 
             # Use the BLAST alignment to determine the query's start and end
             # coordinates in the contig.
@@ -1040,6 +1053,7 @@ class Contig:
                 gapStartInContig = len(self.sequence)
 
             self.path.contigCoordinates[i] = (gapStartInContig, gapEndInContig)
+
 
     # This function returns true if this contig contains the entirety of the
     # other contig.  It will also return true if the two contigs are identical.
@@ -1159,7 +1173,7 @@ class BlastAlignment:
 
         self.queryLength = queryLength
 
-    def getAlignmentQueryLength(self):
+    def getQueryLength(self):
         return self.queryEnd - self.queryStart + 1
 
     def getQueryStartInReference(self):
