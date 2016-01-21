@@ -58,11 +58,6 @@ def main():
     # modifications are carried out.
     if (args.connection_priority):
 
-        print("Removing duplicates... ", end="")
-        sys.stdout.flush()
-        contigs = removeDuplicateContigs(contigs)
-        print("done")
-
         print("Splitting contigs... ", end="")
         sys.stdout.flush()
 
@@ -73,10 +68,15 @@ def main():
         segmentSequences = loadGraphSequences(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
-
-        # Since the contigs have changed, we need to redo the linking.
         addLinksToContigs(contigs, links)
         print("done")
+
+        print("Removing duplicates... ", end="")
+        sys.stdout.flush()
+        contigs = removeDuplicateContigs(contigs)
+        addLinksToContigs(contigs, links)
+        print("done")
+
 
     # Output the graph to file
     print("Saving graph...      ", end="")
@@ -369,6 +369,11 @@ def addPathsToContigs(contigs, paths):
 # information to the contigs.
 def addLinksToContigs(contigs, links):
 
+    # Clear any existing link information.
+    for contig in contigs:
+        contig.outgoingLinkedContigs = []
+        contig.incomingLinkedContigs = []
+
     # For each contig, we take the last graph segment, find the segments that
     # it leads to, and then find the contigs which start with that next
     # segment.  These make up the links to the current contig.
@@ -380,8 +385,9 @@ def addLinksToContigs(contigs, links):
             for contig2 in contigs:
                 startingSegment = contig2.getStartingSegment()
                 if followingSegment == startingSegment:
-                    linkedContigs.append(contig2)
-        contig1.addLinkedContigs(linkedContigs)
+                    contig1.outgoingLinkedContigs.append(contig2)
+                    contig2.incomingLinkedContigs.append(contig1)
+                    break
 
 
 
@@ -697,28 +703,81 @@ def linkIsInContigs(start, end, contigs):
 # between their ends.
 def linkIsBetweenContigs(start, end, contigs):
     for contig1 in contigs:
-        for contig2 in contig1.linkedContigs:
+        for contig2 in contig1.outgoingLinkedContigs:
             if contig1.getEndingSegment() == start and contig2.getStartingSegment() == end:
                 return True
     return False
 
+# This function returns a set of tuples that are the links in the graph.
+def getAllLinksInGraph(contigs):
+    linkSet = set()
+    for contig in contigs:
+        linksInContig = contig.path.getAllLinks()
+        for linkInContig in linksInContig:
+            linkSet.add(linkInContig)
+        linksBetweenContigs = contig.getLinksToOtherContigs()
+        for linkBetweenContigs in linksBetweenContigs:
+            linkSet.add(linkBetweenContigs)
+    return linkSet
+
+
+
 
 
 # This function returns a reduced list of contigs which has no cases where one
-# contig is contained entirely within another.
+# contig is contained entirely within another.  However, a contig will not be
+# removed, even if it is a duplicate, if removing it would 
 def removeDuplicateContigs(contigs):
+
+    #TEMP
+    for contig in contigs:
+        print(contig.getNumberWithSign())
+        print(contig.path.segmentList)
+        print(contig.incomingLinkedContigs)
+        print(contig.outgoingLinkedContigs)
+        print()
+    quit()
 
     # Sort the contigs from big to small.  This ensures that containing contigs
     # will be encountered before contained contigs.
     sortedContigs = sorted(contigs, key=lambda contig: len(contig.sequence), reverse=True)
 
+    # Separate the contigs which contain duplicate regions of other contigs.
+    duplicateContigs = []
     contigsNoDuplicates = []
     for contig1 in contigs:
         for contig2 in contigsNoDuplicates:
             if contig2.contains(contig1):
+                duplicateContigs.append(contig1)
                 break
         else:
             contigsNoDuplicates.append(contig1)
+
+    print(duplicateContigs) #TEMP
+
+    # For each duplicate contig, assess whether it really does need to be
+    # included because of the links it provides.
+    # We do this by checking the graph links to and from this contig and seeing
+    # if those links are present in the rest of the graph.  If not, the contig
+    # must be included.
+    allLinksInGraph = getAllLinksInGraph(contigsNoDuplicates)
+
+    for duplicateContig in duplicateContigs:
+        linksInContig = duplicateContig.path.getAllLinks()
+        linksInContig.extend(duplicateContig.getLinksToOtherContigs())
+
+        for linkInContig in linksInContig:
+            if linkInContig not in allLinksInGraph:
+                contigsNoDuplicates.append(duplicateContig)
+                print("Contig", duplicateContig.getNumberWithSign(), "must be included") #TEMP
+                break;
+        else: #TEMP
+            print("Contig", duplicateContig.getNumberWithSign(), "is okay to remove") #TEMP
+
+
+
+
+    quit()
 
     return contigsNoDuplicates
 
@@ -745,7 +804,8 @@ class Contig:
             covString = covString[:-1]
         self.cov = float(covString)
         self.sequence = sequence
-        self.linkedContigs = [] # filled by addLinkedContigs
+        self.outgoingLinkedContigs = []
+        self.incomingLinkedContigs = []
         self.path = Path()
 
     def __str__(self):
@@ -761,6 +821,14 @@ class Contig:
         if not positive:
             self.fullname += "'"
 
+    def getNumberWithSign(self):
+        num = str(self.number)
+        if self.isPositive():
+            num += '+'
+        else:
+            num += '-'
+        return num
+
     def addPath(self, path):
         self.path = path
 
@@ -770,9 +838,6 @@ class Contig:
     def getEndingSegment(self):
         return self.path.getLastSegment()
 
-    def addLinkedContigs(self, linkedContigs):
-        self.linkedContigs = linkedContigs
-
     def isPositive(self):
         return self.fullname[-1] != "'"
 
@@ -781,9 +846,9 @@ class Contig:
     def getHeaderWithLinks(self):
         headerWithEdges = '>' + self.fullname
 
-        if len(self.linkedContigs) > 0:
+        if len(self.outgoingLinkedContigs) > 0:
             headerWithEdges += ':'
-            for linkedContig in self.linkedContigs:
+            for linkedContig in self.outgoingLinkedContigs:
                 headerWithEdges += linkedContig.fullname + ','
             headerWithEdges = headerWithEdges[0:-1]
 
@@ -925,6 +990,18 @@ class Contig:
 
         return False
 
+    # This function returns a list of the links from this contig to any
+    # other contig.
+    def getLinksToOtherContigs(self):
+        linksToOtherContigs = []
+        for outgoingLinkedContig in self.outgoingLinkedContigs:
+            linksToOtherContigs.append((self.getEndingSegment(), outgoingLinkedContig.getStartingSegment()))
+        for incomingLinkedContig in self.incomingLinkedContigs:
+            linksToOtherContigs.append((incomingLinkedContig.getEndingSegment(), self.getStartingSegment()))
+        return linksToOtherContigs
+
+
+
 
 
 # This class holds a path: the lists of graph segments making up a contig.
@@ -978,6 +1055,15 @@ class Path:
             if s1 == start and s2 == end:
                 return True
         return False
+
+    # This function returns a list of tuple for each link in the path.
+    def getAllLinks(self):
+        links = []
+        for i in range(len(self.segmentList) - 1):
+            s1 = self.segmentList[i]
+            s2 = self.segmentList[i + 1]
+            links.append((s1,s2))
+        return links
 
 
 
