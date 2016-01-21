@@ -54,9 +54,14 @@ def main():
     addLinksToContigs(contigs, links)
     print("done")
 
-    # If the user chose to prioritise connections, then it is necessary to
-    # split contigs which have an internal connection.
+    # If the user chose to prioritise connections, then a number of graph
+    # modifications are carried out.
     if (args.connection_priority):
+
+        print("Removing duplicates... ", end="")
+        sys.stdout.flush()
+        contigs = removeDuplicateContigs(contigs)
+        print("done")
 
         print("Splitting contigs... ", end="")
         sys.stdout.flush()
@@ -465,33 +470,53 @@ def getReverseComplement(forwardSequence):
 # second contig is split to allow for the connection.
 def splitContigs(contigs, links, segmentSequences, graphOverlap):
 
-    # Create a reverse links dictionary.
-    reverseLinks = {}
+    # # Create a reverse links dictionary.
+    # reverseLinks = {}
+    # for start, ends in links.iteritems():
+    #     for end in ends:
+    #         if end not in reverseLinks:
+    #             reverseLinks[end] = []
+    #         reverseLinks[end].append(start)
+
+    # # Compile lists of all segments which reside on contigs dead ends.
+    # deadEndEndSegments = []
+    # deadEndStartSegments = []
+    # for contig in contigs:
+    #     if not contig.linkedContigs:
+    #         deadEndEnd = contig.getEndingSegment()
+    #         deadEndEndSegments.append(deadEndEnd)
+    #         deadEndStartSegments.append(getOppositeSequenceNumber(deadEndEnd))
+
+    # # Find all graph segments which are connected to these dead end segments.
+    # # These will need to be on contig ends, to allow for these connections.
+    # segmentsWhichMustBeOnContigEnds = []
+    # for segment in deadEndStartSegments:
+    #     if segment in reverseLinks:
+    #         segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
+    # segmentsWhichMustBeOnContigStarts = []
+    # for segment in deadEndEndSegments:
+    #     if segment in links:
+    #         segmentsWhichMustBeOnContigStarts.extend(links[segment])
+
+    # Find all missing links.  A missing link is defined as a link in the
+    # assembly graph which is not represented somewhere in the contig graph.
+    # 'Represented somewhere' includes both within a contig and between two
+    # linked contigs.
+    missingLinks = []
     for start, ends in links.iteritems():
         for end in ends:
-            if end not in reverseLinks:
-                reverseLinks[end] = []
-            reverseLinks[end].append(start)
+            if (not linkIsInContigs(start, end, contigs)) and (not linkIsBetweenContigs(start, end, contigs)):
+                missingLinks.append((start,end))
 
-    # Compile lists of all segments which reside on contigs dead ends.
-    deadEndEndSegments = []
-    deadEndStartSegments = []
-    for contig in contigs:
-        if not contig.linkedContigs:
-            deadEndEnd = contig.getEndingSegment()
-            deadEndEndSegments.append(deadEndEnd)
-            deadEndStartSegments.append(getOppositeSequenceNumber(deadEndEnd))
-
-    # Find all graph segments which are connected to these dead end segments.
-    # These will need to be on contig ends, to allow for these connections.
+    # In order for these links to be present in the graph, we need to split
+    # contigs such that the start segments of missing links are on the ends
+    # of contigs and the end segments of missing links are on the starts of
+    # contigs.
     segmentsWhichMustBeOnContigEnds = []
-    for segment in deadEndStartSegments:
-        if segment in reverseLinks:
-            segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
     segmentsWhichMustBeOnContigStarts = []
-    for segment in deadEndEndSegments:
-        if segment in links:
-            segmentsWhichMustBeOnContigStarts.extend(links[segment])
+    for missingLink in missingLinks:
+        segmentsWhichMustBeOnContigEnds.append(missingLink[0])
+        segmentsWhichMustBeOnContigStarts.append(missingLink[1])
 
     # Now split contigs, as necessary.
     newPositiveContigs = []
@@ -660,10 +685,42 @@ def saveSequenceToFastaFile(sequence, sequenceName, filename):
     fastaFile.write(sequence)
     fastaFile.write('\n')
 
+# This function looks through all contigs to see if the link is present in
+# their paths.
+def linkIsInContigs(start, end, contigs):
+    for contig in contigs:
+        if contig.path.containsLink(start, end):
+            return True
+    return False
+
+# This function looks through all pairs of contigs to see if the link exists
+# between their ends.
+def linkIsBetweenContigs(start, end, contigs):
+    for contig1 in contigs:
+        for contig2 in contig1.linkedContigs:
+            if contig1.getEndingSegment() == start and contig2.getStartingSegment() == end:
+                return True
+    return False
 
 
 
+# This function returns a reduced list of contigs which has no cases where one
+# contig is contained entirely within another.
+def removeDuplicateContigs(contigs):
 
+    # Sort the contigs from big to small.  This ensures that containing contigs
+    # will be encountered before contained contigs.
+    sortedContigs = sorted(contigs, key=lambda contig: len(contig.sequence), reverse=True)
+
+    contigsNoDuplicates = []
+    for contig1 in contigs:
+        for contig2 in contigsNoDuplicates:
+            if contig2.contains(contig1):
+                break
+        else:
+            contigsNoDuplicates.append(contig1)
+
+    return contigsNoDuplicates
 
 
 
@@ -757,7 +814,7 @@ class Contig:
     # necessary before we can split a contig.
     def determineAllSegmentLocations(self, segmentSequences, graphOverlap):
 
-        #Create a temporary directory for doing BLAST searches.
+        # Create a temporary directory for doing BLAST searches.
         if not os.path.exists('GetSPAdesContigGraph-temp'):
             os.makedirs('GetSPAdesContigGraph-temp')
 
@@ -852,7 +909,21 @@ class Contig:
 
             self.path.contigCoordinates[i] = (gapStartInContig, gapEndInContig)
 
+    # This function returns true if this contig contains the entirety of the
+    # other contig.  It will also return true if the two contigs are identical.
+    # http://stackoverflow.com/questions/3847386/testing-if-a-list-contains-another-list-with-python
+    def contains(self, otherContig):
+        small = otherContig.path.segmentList
+        big = self.path.segmentList
 
+        for i in xrange(len(big)-len(small)+1):
+            for j in xrange(len(small)):
+                if big[i+j] != small[j]:
+                    break
+            else:
+                return True
+
+        return False
 
 
 
@@ -892,6 +963,22 @@ class Path:
             else:
                 output += segment + ','
         return output[:-1] + '\n'
+
+    # This function looks for a particular link within the path.  It returns
+    # true if the link is present, false if not.
+    def containsLink(self, start, end):
+
+        # A path must have at least 2 segments to possibly contain the link.
+        if len(self.segmentList) < 2:
+            return False
+
+        for i in range(len(self.segmentList) - 1):
+            s1 = self.segmentList[i]
+            s2 = self.segmentList[i + 1]
+            if s1 == start and s2 == end:
+                return True
+        return False
+
 
 
 
