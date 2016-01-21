@@ -33,13 +33,13 @@ def main():
     args = getArguments()
 
     # Load in the user-specified files.
-    print("Loading graph...     ", end="")
+    print("Loading graph...       ", end="")
     sys.stdout.flush()
     links = loadGraphLinks(args.graph)
-    print("done\nLoading contigs...   ", end="")
+    print("done\nLoading contigs...     ", end="")
     sys.stdout.flush()
     contigs = loadContigs(args.contigs)
-    print("done\nLoading paths...     ", end="")
+    print("done\nLoading paths...       ", end="")
     sys.stdout.flush()
     paths = loadPaths(args.paths)
     print("done")
@@ -48,7 +48,7 @@ def main():
     # Add the paths to each contig object, so each contig knows its graph path,
     # and add the links to each contig object, turning the contigs into a
     # graph.
-    print("Building graph...    ", end="")
+    print("Building graph...      ", end="")
     sys.stdout.flush()
     addPathsToContigs(contigs, paths)
     addLinksToContigs(contigs, links)
@@ -62,7 +62,7 @@ def main():
             print("Error: could not find BLAST program", file=sys.stderr)
             quit()
 
-        print("Splitting contigs... ", end="")
+        print("Splitting contigs...   ", end="")
         sys.stdout.flush()
         segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
@@ -81,10 +81,17 @@ def main():
         recalculateContigDepths(contigs, segmentSequences, segmentDepths, graphOverlap)
         print("done")
 
+        print("Renumbering contigs... ", end="")
+        sys.stdout.flush()
+        contigs = renumberContigs(contigs)
+        addLinksToContigs(contigs, links)
+        print("done")
+
+
 
 
     # Output the graph to file
-    print("Saving graph...      ", end="")
+    print("Saving graph...        ", end="")
     sys.stdout.flush()
     outputFile = open(args.output, 'w')
     for contig in contigs:
@@ -94,7 +101,7 @@ def main():
 
     # If the user asked for a paths file, save that to file too.
     if args.paths_out != '':
-        print("Saving paths...      ", end="")
+        print("Saving paths...        ", end="")
         sys.stdout.flush()
         outputPathsFile = open(args.paths_out, 'w')
         for contig in contigs:
@@ -806,6 +813,30 @@ def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
             finalDepth = totalDepthTimesLength / totalLength
             contig.cov = finalDepth
             contig.rebuildFullName()
+
+
+
+def renumberContigs(contigs):
+
+    # Renumber positive contigs only (we'll rebuild the negative contigs later)
+    positiveContigs = []
+    for contig in contigs:
+        if contig.isPositive():
+            positiveContigs.append(contig)
+
+    # Sort from big to small, so contig 1 is the largest.
+    sortedContigs = sorted(positiveContigs, key=lambda contig: len(contig.sequence), reverse=True)
+
+    # Assign new numbers and create complement contigs.
+    newContigs = []
+    i = 1
+    for contig in sortedContigs:
+        contig.renumber(i)
+        i += 1
+        newContigs.append(contig)
+        newContigs.append(getReverseComplementContig(contig))
+
+    return newContigs
 
 
 
