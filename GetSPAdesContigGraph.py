@@ -33,77 +33,93 @@ def main():
     args = getArguments()
 
     # Load in the user-specified files.
-    print("Loading graph......... ", end="")
+    print('Loading graph......... ', end='')
     sys.stdout.flush()
-    links = loadGraphLinks(args.graph)
-    print("done\nLoading contigs....... ", end="")
+    try:
+        links = loadGraphLinks(args.graph)
+    except:
+        print('\nError: could not load ' + args.graph, file=sys.stderr)
+        quit()
+    print('done\nLoading contigs....... ', end='')
     sys.stdout.flush()
-    contigs = loadContigs(args.contigs)
-    print("done\nLoading paths......... ", end="")
+    try:
+        contigs = loadContigs(args.contigs)
+    except:
+        print('\nError: could not load ' + args.contigs, file=sys.stderr)
+        quit()
+    print('done\nLoading paths......... ', end='')
     sys.stdout.flush()
-    paths = loadPaths(args.paths, links)
-    print("done")
+    try:
+        paths = loadPaths(args.paths, links)
+    except:
+        print('\nError: could not load ' + args.paths, file=sys.stderr)
+        quit()
+    print('done')
 
     # Add the paths to each contig object, so each contig knows its graph path,
     # and add the links to each contig object, turning the contigs into a
     # graph.
-    print("Building graph........ ", end="")
+    print('Building graph........ ', end='')
     sys.stdout.flush()
     addPathsToContigs(contigs, paths)
     addLinksToContigs(contigs, links)
-    print("done")
+    print('done')
 
     # If the user chose to prioritise connections, then some graph
     # modifications are carried out.
     if (args.connection_priority):
 
         if not isBlastInstalled():
-            print("Error: could not find BLAST program", file=sys.stderr)
+            print('Error: could not find BLAST program', file=sys.stderr)
             quit()
 
-        print("Splitting contigs..... ", end="")
+        print('Splitting contigs..... ', end='')
         sys.stdout.flush()
-        segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
+        try:
+            segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
+        except:
+            print('\nError: could not determine graph sequences and depths', file=sys.stderr)
+            quit()
         graphOverlap = getGraphOverlap(links, segmentSequences)
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
         addLinksToContigs(contigs, links)
-        print("done")
+        print('done')
 
-        print("Removing duplicates... ", end="")
+        print('Removing duplicates... ', end='')
         sys.stdout.flush()
         contigs = removeDuplicateContigs(contigs)
         addLinksToContigs(contigs, links)
-        print("done")
+        print('done')
 
-        print("Calculating depth..... ", end="")
+        print('Calculating depth..... ', end='')
         sys.stdout.flush()
         recalculateContigDepths(contigs, segmentSequences, segmentDepths, graphOverlap)
-        print("done")
+        print('done')
 
-        print("Renumbering contigs... ", end="")
+        print('Renumbering contigs... ', end='')
         sys.stdout.flush()
         contigs = renumberContigs(contigs)
         addLinksToContigs(contigs, links)
-        print("done")
+        print('done')
 
     # Output the graph to file
-    print("Saving graph.......... ", end="")
+    print('Saving graph.......... ', end='')
     sys.stdout.flush()
     outputFile = open(args.output, 'w')
     for contig in contigs:
         outputFile.write(contig.getHeaderWithLinks())
         outputFile.write(contig.getSequenceWithLineBreaks())
-    print("done")
+    print('done')
 
     # If the user asked for a paths file, save that to file too.
     if args.paths_out != '':
-        print("Saving paths.......... ", end="")
+        print('Saving paths.......... ', end='')
         sys.stdout.flush()
         outputPathsFile = open(args.paths_out, 'w')
         for contig in contigs:
             outputPathsFile.write(contig.fullname + '\n')
             outputPathsFile.write(contig.path.getPathsWithLineBreaks())
-        print("done")
+        print('done')
         
 
 
@@ -746,7 +762,7 @@ def getGraphOverlap(links, segmentSequences):
     # If the code gets here, that means we have tried every segment pair and
     # there are still multiple possible overlaps.  This shouldn't happen in
     # anything but tiny graphs or seriously pathological cases.
-    print("Error: failed to correctly determine graph overlap", file=sys.stderr)
+    print('Error: failed to correctly determine graph overlap', file=sys.stderr)
     return 0
 
 
@@ -1252,7 +1268,7 @@ class Path:
 class BlastAlignment:
 
     def __init__(self, blastString, queryLength):
-        blastStringParts = blastString.split("\t")
+        blastStringParts = blastString.split('\t')
 
         self.percentIdentity = float(blastStringParts[1])
 
@@ -1283,14 +1299,14 @@ class BlastAlignment:
         return self.getQueryStartInReference() < other.getQueryStartInReference()
 
     def __str__(self):
-        return "reference: " + str(self.referenceStart) + " to " + str(self.referenceEnd) + \
-               ", query: " + str(self.queryStart) + " to " + str(self.queryEnd) + \
-               ", identity: " + str(self.percentIdentity) + "%"
+        return 'reference: ' + str(self.referenceStart) + ' to ' + str(self.referenceEnd) + \
+               ', query: ' + str(self.queryStart) + ' to ' + str(self.queryEnd) + \
+               ', identity: ' + str(self.percentIdentity) + '%'
 
     def __repr__(self):
-        return "reference: " + str(self.referenceStart) + " to " + str(self.referenceEnd) + \
-               ", query: " + str(self.queryStart) + " to " + str(self.queryEnd) + \
-               ", identity: " + str(self.percentIdentity) + "%"
+        return 'reference: ' + str(self.referenceStart) + ' to ' + str(self.referenceEnd) + \
+               ', query: ' + str(self.queryStart) + ' to ' + str(self.queryEnd) + \
+               ', identity: ' + str(self.percentIdentity) + '%'
 
 
 
