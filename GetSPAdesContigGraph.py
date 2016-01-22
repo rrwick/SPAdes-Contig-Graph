@@ -794,19 +794,28 @@ def linkIsBetweenContigs(start, end, contigs):
 # This function returns a set of tuples that contains all graph links for the
 # given set of contigs.
 def getAllLinksBetweenContigs(contigs):
+
+    # Build a set of the contigs, as this will make it faster to check if any
+    # given contig is in the set.
+    contigSet = set(contigs)
+
     linkSet = set()
-    for contig1 in contigs:
-        linksInContig = contig1.path.getAllLinks()
+
+    for contig in contigs:
+
+        linksInContig = contig.path.getAllLinks()
         for linkInContig in linksInContig:
             linkSet.add(linkInContig)
 
-        downstreamContigs = contig1.outgoingLinkedContigs
-        upstreamContigs = contig1.incomingLinkedContigs
-        for contig2 in contigs:
-            if contig2 in downstreamContigs:
-                linkSet.add((contig1.getEndingSegment(), contig2.getStartingSegment()))
-            if contig2 in upstreamContigs:
-                linkSet.add((contig2.getEndingSegment(), contig1.getStartingSegment()))
+        downstreamContigs = contig.outgoingLinkedContigs
+        for downstreamContig in downstreamContigs:
+            if downstreamContig in contigSet:
+                linkSet.add((contig.getEndingSegment(), downstreamContig.getStartingSegment()))
+
+        upstreamContigs = contig.incomingLinkedContigs
+        for upstreamContig in upstreamContigs:
+            if upstreamContig in contigSet:
+                linkSet.add((upstreamContig.getEndingSegment(), contig.getStartingSegment()))
 
     return linkSet
 
@@ -816,7 +825,8 @@ def getAllLinksBetweenContigs(contigs):
 
 # This function returns a reduced list of contigs which has no cases where one
 # contig is contained entirely within another.  However, a contig will not be
-# removed, even if it is a duplicate, if removing it would 
+# removed, even if it is a duplicate, if removing it would remove a graph
+# connection that is not present elsewhere in the contigs.
 def removeDuplicateContigs(contigs):
 
     # Sort the contigs from big to small.  This ensures that containing contigs
@@ -841,7 +851,6 @@ def removeDuplicateContigs(contigs):
     # must be included.
     for duplicateContig in duplicateContigs:
         allLinksInGraph = getAllLinksBetweenContigs(contigsNoDuplicates)
-
         linksInContig = duplicateContig.getLinksInThisContigAndToOtherContigs()
         for linkInContig in linksInContig:
             if linkInContig not in allLinksInGraph:
@@ -867,15 +876,29 @@ def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
 
         totalLength = 0
         totalDepthTimesLength = 0.0
+
         for segment in contig.path.segmentList:
             if segment.startswith('gap'):
                 continue
-            depth = depths[segment]
+
+            # Get the segment depth and length.  In some odd cases, SPAdes does
+            # not save both segments in a complementary pair, so we may have to
+            # look for the complementary segment.
+            if segment in depths:
+                depth = depths[segment]
+            else:
+                depth = depths[getOppositeSequenceNumber(segment)]
             adjustedDepth = depth
-            length = len(sequences[segment])
+
+            if segment in sequences:
+                length = len(sequences[segment])
+            else:
+                length = len(sequences[getOppositeSequenceNumber(segment)])
             adjustedLength = length - graphOverlap
+
             totalLength += adjustedLength
             totalDepthTimesLength += adjustedDepth * adjustedLength
+
         if totalLength > 0:
             finalDepth = totalDepthTimesLength / totalLength
             contig.cov = finalDepth
