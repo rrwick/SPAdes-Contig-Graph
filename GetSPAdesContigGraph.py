@@ -585,6 +585,38 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
         segmentsWhichMustBeOnContigEnds.append(missingLink[0])
         segmentsWhichMustBeOnContigStarts.append(missingLink[1])
 
+    # Create a reverse links dictionary.
+    reverseLinks = {}
+    for start, ends in links.iteritems():
+        for end in ends:
+            if end not in reverseLinks:
+                reverseLinks[end] = []
+            reverseLinks[end].append(start)
+
+    # Compile lists of all segments which reside on contigs dead ends.
+    deadEndEndSegments = []
+    deadEndStartSegments = []
+    for contig in contigs:
+        if not contig.outgoingLinkedContigs:
+            deadEndEnd = contig.getEndingSegment()
+            deadEndEndSegments.append(deadEndEnd)
+            deadEndStartSegments.append(getOppositeSequenceNumber(deadEndEnd))
+
+    # Find all graph segments which are connected to these dead end segments.
+    # These will need to be on contig ends, to allow for these connections.
+    segmentsWhichMustBeOnContigEnds = []
+    for segment in deadEndStartSegments:
+        if segment in reverseLinks:
+            segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
+    segmentsWhichMustBeOnContigStarts = []
+    for segment in deadEndEndSegments:
+        if segment in links:
+            segmentsWhichMustBeOnContigStarts.extend(links[segment])
+
+    # Remove any duplicates from the segments lists just made.
+    segmentsWhichMustBeOnContigStarts = list(set(segmentsWhichMustBeOnContigStarts))
+    segmentsWhichMustBeOnContigEnds = list(set(segmentsWhichMustBeOnContigEnds))
+
     # Now split contigs, as necessary.
     newPositiveContigs = []
     nextContigNumber = 1
