@@ -463,6 +463,7 @@ def addLinksToContigs(contigs, links):
     # it leads to, and then find the contigs which start with that next
     # segment.  These make up the links to the current contig.
     for contig1 in contigs:
+        outgoingLinkedContigs = set()
         endingSegment = contig1.getEndingSegment()
         followingSegments = links[endingSegment]
         linkedContigs = []
@@ -472,6 +473,14 @@ def addLinksToContigs(contigs, links):
                 if followingSegment == startingSegment:
                     contig1.outgoingLinkedContigs.append(contig2)
                     contig2.incomingLinkedContigs.append(contig1)
+
+    # This process can create duplicate linked contigs, so we now go through
+    # them to remove the duplicates.
+    for contig in contigs:
+        contig.outgoingLinkedContigs = list(set(contig.outgoingLinkedContigs))
+        contig.incomingLinkedContigs = list(set(contig.incomingLinkedContigs))
+
+
 
 
 
@@ -823,33 +832,35 @@ def linkIsBetweenContigs(start, end, contigs):
                 return True
     return False
 
-# This function returns a set of tuples that contains all graph links for the
-# given set of contigs.
+# This function returns two sets of tuples:
+#  - all graph links contained within the given contigs
+#  - all graph links contained between the given contigs
 def getAllLinksBetweenContigs(contigs):
 
     # Build a set of the contigs, as this will make it faster to check if any
     # given contig is in the set.
     contigSet = set(contigs)
 
-    linkSet = set()
+    internalLinks = set()
+    externalLinks = set()
 
     for contig in contigs:
 
         linksInContig = contig.path.getAllLinks()
         for linkInContig in linksInContig:
-            linkSet.add(linkInContig)
+            internalLinks.add(linkInContig)
 
         downstreamContigs = contig.outgoingLinkedContigs
         for downstreamContig in downstreamContigs:
             if downstreamContig in contigSet:
-                linkSet.add((contig.getEndingSegment(), downstreamContig.getStartingSegment()))
+                externalLinks.add((contig.getEndingSegment(), downstreamContig.getStartingSegment()))
 
         upstreamContigs = contig.incomingLinkedContigs
         for upstreamContig in upstreamContigs:
             if upstreamContig in contigSet:
-                linkSet.add((upstreamContig.getEndingSegment(), contig.getStartingSegment()))
+                externalLinks.add((upstreamContig.getEndingSegment(), contig.getStartingSegment()))
 
-    return linkSet
+    return internalLinks, externalLinks
 
 
 
@@ -881,13 +892,31 @@ def removeDuplicateContigs(contigs):
     # We do this by checking the graph links to and from this contig and seeing
     # if those links are present in the rest of the graph.  If not, the contig
     # must be included.
+    allInternalLinks, allExternalLinks = getAllLinksBetweenContigs(contigsNoDuplicates)
+
     for duplicateContig in duplicateContigs:
-        allLinksInGraph = getAllLinksBetweenContigs(contigsNoDuplicates)
-        linksInContig = duplicateContig.getLinksInThisContigAndToOtherContigs()
-        for linkInContig in linksInContig:
-            if linkInContig not in allLinksInGraph:
-                contigsNoDuplicates.append(duplicateContig)
+
+        internalLinks = duplicateContig.path.getAllLinks()
+        externalLinks = duplicateContig.getLinksToOtherContigs()
+
+        hasUniqueInternalLink = False
+        hasUniqueExternalLink = False
+
+        for internalLink in internalLinks:
+            if internalLink not in allInternalLinks:
+                hasUniqueInternalLink = True
                 break
+        for externalLink in externalLinks:
+            if externalLink not in allExternalLinks:
+                hasUniqueExternalLink = True
+                break
+
+        if hasUniqueInternalLink or hasUniqueExternalLink:
+            contigsNoDuplicates.append(duplicateContig)
+            for internalLink in internalLinks:
+                allInternalLinks.add(internalLink)
+            for externalLink in externalLinks:
+                allExternalLinks.add(externalLink)
 
     return contigsNoDuplicates
 
@@ -1241,12 +1270,12 @@ class Contig:
             linksToOtherContigs.append((self.getEndingSegment(), outgoingLinkedContig.getStartingSegment()))
         for incomingLinkedContig in self.incomingLinkedContigs:
             linksToOtherContigs.append((incomingLinkedContig.getEndingSegment(), self.getStartingSegment()))
-        return linksToOtherContigs
+        return list(set(linksToOtherContigs))
 
     def getLinksInThisContigAndToOtherContigs(self):
         links = self.path.getAllLinks()
         links.extend(self.getLinksToOtherContigs())
-        return links
+        return list(set(links))
 
 
 
