@@ -47,11 +47,11 @@ It is important to note that the contig graphs made by this program may NOT have
 To illustrate why, consider the following example (described by SPAdes author Anton Korobeynikov):
 * An assembly graph has three segments: A, B and C.
 * There are two connections in the graph: A -> B and C -> B.
-* When producing contigs from the graph, SPAdes makes two: AB and C.
+* SPAdes makes two contigs from the graph: AB and C.
 
-If you then used GetSPAdesContigGraph on this example, there would be no connections.  The A -> B connection is already included in a contig and the C -> B connection has nowhere to attach.
+If you then used GetSPAdesContigGraph in length priority mode on this example, there would be no connections.  The A -> B connection is already included in a contig and the C -> B connection has nowhere to attach.  If, however, you used the program in connection priority mode, the AB contig would be split into two contigs (A and B) to allow for C to attach.  In this simple case, the result is no better than the original assembly graph.
 
-Even when run in connection-priority mode, the resulting contig graph is typically much simpler than the assembly graph and not all possible arrangements are represented.  Therefore, in complex or ambiguous cases, it is recommended to view the SPAdes' assembly_graph.fastg file to see all assembly connections.
+Therefore, when using this tool, please keep in mind that the contig graphs it generates may not contain the full complexity of the assembly graph.  In complex or ambiguous cases, it is recommended to use the SPAdes assembly graph.
 
 
 
