@@ -37,21 +37,21 @@ def main():
     sys.stdout.flush()
     try:
         links = loadGraphLinks(args.graph)
-    except:
+    except Exception:
         print('\nError: could not load ' + args.graph, file=sys.stderr)
         quit()
     print('done\nLoading contigs....... ', end='')
     sys.stdout.flush()
     try:
         contigs = loadContigs(args.contigs)
-    except:
+    except Exception:
         print('\nError: could not load ' + args.contigs, file=sys.stderr)
         quit()
     print('done\nLoading paths......... ', end='')
     sys.stdout.flush()
     try:
         paths = loadPaths(args.paths, links)
-    except:
+    except Exception:
         print('\nError: could not load ' + args.paths, file=sys.stderr)
         quit()
     print('done')
@@ -67,7 +67,7 @@ def main():
 
     # If the user chose to prioritise connections, then some graph
     # modifications are carried out.
-    if (args.connection_priority):
+    if args.connection_priority:
 
         if not isBlastInstalled():
             print('Error: could not find BLAST program', file=sys.stderr)
@@ -77,7 +77,7 @@ def main():
         sys.stdout.flush()
         try:
             segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
-        except:
+        except Exception:
             print('\nError: could not determine graph sequences and depths', file=sys.stderr)
             quit()
         graphOverlap = getGraphOverlap(links, segmentSequences)
@@ -119,7 +119,7 @@ def main():
             outputPathsFile.write(contig.fullname + '\n')
             outputPathsFile.write(contig.path.getPathsWithLineBreaks())
         print('done')
-        
+
 
 
 
@@ -377,7 +377,7 @@ def loadPaths(pathFilename, links):
     # Now we go through the paths and rename our gap segments.  Anything named
     # gap_POS will get the name of the preceding path segment.  Anything named
     # gap_NEG will get the name of the following path segment.
-    for contigName, path in paths.iteritems():
+    for path in paths.itervalues():
         for i in range(len(path.segmentList)):
             segment = path.segmentList[i]
             if segment == 'gap_POS':
@@ -387,7 +387,7 @@ def loadPaths(pathFilename, links):
 
     # Now we must go through all of the paths we just made and add any links
     # for new gap segments.
-    for contigName, path in paths.iteritems():
+    for path in paths.itervalues():
         for i in range(len(path.segmentList) - 1):
             j = i + 1
             s1 = path.segmentList[i]
@@ -473,7 +473,6 @@ def addLinksToContigs(contigs, links, clear, deadEndsOnly):
     # it leads to, and then find the contigs which start with that next
     # segment.  These make up the links to the current contig.
     for contig1 in contigs:
-        outgoingLinkedContigs = set()
         endingSegment = contig1.getEndingSegment()
         followingSegments = links[endingSegment]
 
@@ -590,7 +589,7 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
     allGraphLinks = set()
     for start, ends in links.iteritems():
         for end in ends:
-            allGraphLinks.add((start,end))
+            allGraphLinks.add((start, end))
     missingLinks = []
     for graphLink in allGraphLinks:
         if graphLink not in linksInContigs:
@@ -723,13 +722,13 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
     # Now we have to put together the links in new contig numbers.  First we
     # Create the internal links between parts of a split contig.
     linksAfterSplits = {}
-    for old, new in oldNumbersToNewNumbers.iteritems():
-        for i in range(len(new) - 1):
-            start = str(new[i]) + '+'
-            end = str(new[i+1]) + '+'
+    for newNum in oldNumbersToNewNumbers.itervalues():
+        for i in range(len(newNum) - 1):
+            start = str(newNum[i]) + '+'
+            end = str(newNum[i+1]) + '+'
             linksAfterSplits[start] = [end]
-            start = str(new[i+1]) + '-'
-            end = str(new[i]) + '-'
+            start = str(newNum[i+1]) + '-'
+            end = str(newNum[i]) + '-'
             linksAfterSplits[start] = [end]
 
     # Add the external links between contigs.  To do this we need to
@@ -866,8 +865,8 @@ def getGraphOverlap(links, segmentSequences):
     # Determine the shortest segment in the graph, as this will be the maximum
     # possible overlap.
     segmentLengths = []
-    for key, value in segmentSequences.items():
-        segmentLengths.append(len(value))
+    for sequence in segmentSequences.itervalues():
+        segmentLengths.append(len(sequence))
     shortestSegmentSequence = min(segmentLengths)
 
     # Now we loop through each overlap looking at the segment pairs.
@@ -925,7 +924,7 @@ def linkIsBetweenContigs(start, end, contigs):
 
 
 # This function looks for contigs which are made of the exact same graph
-# segments as each other.  
+# segments as each other.
 def mergeIdenticalContigs(contigs):
 
     contigGroups = []
@@ -1124,9 +1123,6 @@ def removeBogusLinks(contigs):
 def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
 
     for contig in contigs:
-        segmentLengths = []
-        segmentDepths = []
-
         totalLength = 0
         totalDepthTimesLength = 0.0
 
@@ -1346,7 +1342,7 @@ class Contig:
         # contig coordinates.  When it is set to None, that means we don't
         # know.
         expectedSegmentStartInContig = 1
-        
+
         for i in range(len(self.path.segmentList)):
             segment = self.path.segmentList[i]
 
@@ -1483,9 +1479,9 @@ class Contig:
 
 # This class holds a path: the lists of graph segments making up a contig.
 class Path:
-    def __init__(self, segmentList = []):
+    def __init__(self, segmentList=[]):
         self.segmentList = segmentList
-        self.contigCoordinates = [(0,0) for i in range(len(segmentList))]
+        self.contigCoordinates = [(0, 0) for i in range(len(segmentList))]
 
     def getFirstSegment(self):
         return self.segmentList[0]
@@ -1494,10 +1490,10 @@ class Path:
         return self.segmentList[-1]
 
     def __str__(self):
-        return str(self.segmentList) + ', ' + str(self.contigCoordinates) 
+        return str(self.segmentList) + ', ' + str(self.contigCoordinates)
 
     def __repr__(self):
-        return str(self.segmentList) + ', ' + str(self.contigCoordinates) 
+        return str(self.segmentList) + ', ' + str(self.contigCoordinates)
 
     def getSegmentCount(self):
         return len(self.segmentList)
@@ -1539,7 +1535,7 @@ class Path:
         for i in range(len(self.segmentList) - 1):
             s1 = self.segmentList[i]
             s2 = self.segmentList[i + 1]
-            links.append((s1,s2))
+            links.append((s1, s2))
         return links
 
 
