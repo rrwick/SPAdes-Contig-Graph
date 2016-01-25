@@ -32,93 +32,25 @@ from distutils import spawn
 def main():
     args = getArguments()
 
-    # Load in the user-specified files.
-    print('Loading graph......... ', end='')
-    sys.stdout.flush()
-    try:
-        links = loadGraphLinks(args.graph)
-    except Exception:
-        print('\nError: could not load ' + args.graph, file=sys.stderr)
-        quit()
-    print('done\nLoading contigs....... ', end='')
-    sys.stdout.flush()
-    try:
-        contigs = loadContigs(args.contigs)
-    except Exception:
-        print('\nError: could not load ' + args.contigs, file=sys.stderr)
-        quit()
-    print('done\nLoading paths......... ', end='')
-    sys.stdout.flush()
-    try:
-        paths = loadPaths(args.paths, links)
-    except Exception:
-        print('\nError: could not load ' + args.paths, file=sys.stderr)
-        quit()
-    print('done')
+    links = loadGraphLinks(args.graph)
+    contigs = loadContigs(args.contigs)
+    paths = loadPaths(args.paths, links)
+    buildGraph(contigs, paths, links)
 
-    # Add the paths to each contig object, so each contig knows its graph path,
-    # and add the links to each contig object, turning the contigs into a
-    # graph.
-    print('Building graph........ ', end='')
-    sys.stdout.flush()
-    addPathsToContigs(contigs, paths)
-    addLinksToContigs(contigs, links, True, False)
-    print('done')
-
-    # If the user chose to prioritise connections, then some graph
-    # modifications are carried out.
     if args.connection_priority:
-
-        if not isBlastInstalled():
-            print('Error: could not find BLAST program', file=sys.stderr)
-            quit()
-
-        print('Splitting contigs..... ', end='')
-        sys.stdout.flush()
-        try:
-            segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
-        except Exception:
-            print('\nError: could not determine graph sequences and depths', file=sys.stderr)
-            quit()
+        checkForBlast()
+        segmentSequences, segmentDepths = loadGraphSequencesAndDepths(args.graph)
         graphOverlap = getGraphOverlap(links, segmentSequences)
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
-        addLinksToContigs(contigs, links, False, True)
-        print('done')
-
-        print('Merging contigs....... ', end='')
-        sys.stdout.flush()
-        contigs = mergeIdenticalContigs(contigs)
-        contigs = mergeLinearRuns(contigs, graphOverlap)
-        print('done')
-
-        print('Calculating depth..... ', end='')
-        sys.stdout.flush()
+        contigs = mergeContigs(contigs, graphOverlap)
         recalculateContigDepths(contigs, segmentSequences, segmentDepths, graphOverlap)
-        print('done')
-
-        print('Renumbering contigs... ', end='')
-        sys.stdout.flush()
         renumberContigs(contigs)
-        print('done')
 
-    # Output the graph to file
-    print('Saving graph.......... ', end='')
-    sys.stdout.flush()
-    outputFile = open(args.output, 'w')
-    for contig in contigs:
-        outputFile.write(contig.getHeaderWithLinks())
-        outputFile.write(contig.getSequenceWithLineBreaks())
-    print('done')
+    saveGraphToFile(contigs, args.output)
 
-    # If the user asked for a paths file, save that to file too.
-    if args.paths_out != '':
-        print('Saving paths.......... ', end='')
-        sys.stdout.flush()
-        outputPathsFile = open(args.paths_out, 'w')
-        for contig in contigs:
-            outputPathsFile.write(contig.fullname + '\n')
-            outputPathsFile.write(contig.path.getPathsWithLineBreaks())
-        print('done')
+    if args.paths_out:
+        savePathsToFile(contigs, args.paths_out)
+
 
 
 
@@ -140,6 +72,33 @@ def getArguments():
 
 
 
+def saveGraphToFile(contigs, graphFilename):
+    print('Saving graph.......... ', end='')
+    sys.stdout.flush()
+    outputFile = open(graphFilename, 'w')
+    for contig in contigs:
+        outputFile.write(contig.getHeaderWithLinks())
+        outputFile.write(contig.getSequenceWithLineBreaks())
+    print('done')
+
+
+def savePathsToFile(contigs, pathsFilename):
+    print('Saving paths.......... ', end='')
+    sys.stdout.flush()
+    outputPathsFile = open(pathsFilename, 'w')
+    for contig in contigs:
+        outputPathsFile.write(contig.fullname + '\n')
+        outputPathsFile.write(contig.path.getPathsWithLineBreaks())
+    print('done')
+
+
+
+
+def checkForBlast():
+    if not isBlastInstalled():
+        print('Error: could not find BLAST program', file=sys.stderr)
+        quit()
+
 
 def isBlastInstalled():
     makeblastdbPath = spawn.find_executable('makeblastdb')
@@ -147,10 +106,25 @@ def isBlastInstalled():
     return makeblastdbPath != None and blastnPath != None
 
 
+
+def loadContigs(contigFilename):
+    print('Loading contigs....... ', end='')
+    sys.stdout.flush()
+    try:
+        contigs = loadContigs2(contigFilename)
+    except Exception:
+        print('\nError: could not load ' + contigFilename, file=sys.stderr)
+        quit()
+    print('done')
+    return contigs
+
+
+
+
 # This function takes a contig filename and returns a list of Contig objects.
 # It expects a file of just foward contigs, but it creates both forward and
 # reverse complement Contig objects.
-def loadContigs(contigFilename):
+def loadContigs2(contigFilename):
 
     contigs = []
 
@@ -195,11 +169,23 @@ def loadContigs(contigFilename):
 
 
 
+def loadGraphLinks(graphFilename):
+    print('Loading graph......... ', end='')
+    sys.stdout.flush()
+    try:
+        links = loadGraphLinks2(graphFilename)
+    except Exception:
+        print('\nError: could not load ' + graphFilename, file=sys.stderr)
+        quit()
+    print('done')
+    return links
+
+
 # This function takes a graph filename and returns a dictionary of the graph
 # links.
 # The dictionary key is the starting graph segment.
 # The dictionary value is a list of the ending graph segments.
-def loadGraphLinks(graphFilename):
+def loadGraphLinks2(graphFilename):
 
     links = {}
     graphFile = open(graphFilename, 'r')
@@ -256,6 +242,29 @@ def loadGraphLinks(graphFilename):
 
 
 
+def buildGraph(contigs, paths, links):
+    # Add the paths to each contig object, so each contig knows its graph path,
+    # and add the links to each contig object, turning the contigs into a
+    # graph.
+    print('Building graph........ ', end='')
+    sys.stdout.flush()
+    addPathsToContigs(contigs, paths)
+    addLinksToContigs(contigs, links, True, False)
+    print('done')
+
+
+
+
+def loadGraphSequencesAndDepths(graphFilename):
+    try:
+        segmentSequences, segmentDepths = loadGraphSequencesAndDepths2(graphFilename)
+    except Exception:
+        print('\nError: could not determine graph sequences and depths', file=sys.stderr)
+        quit()
+    return segmentSequences, segmentDepths
+
+
+
 # This function takes a graph filename and returns two dictionaries:
 #  Graph sequences:
 #     The dictionary key is the graph segment names.
@@ -263,7 +272,7 @@ def loadGraphLinks(graphFilename):
 #  Graph depth:
 #     The dictionary key is the graph segment names.
 #     The dictionary value is the graph segment read depth (cov).
-def loadGraphSequencesAndDepths(graphFilename):
+def loadGraphSequencesAndDepths2(graphFilename):
 
     sequences = {}
     depths = {}
@@ -315,11 +324,24 @@ def loadGraphSequencesAndDepths(graphFilename):
 
 
 
+def loadPaths(pathFilename, links):
+    print('Loading paths......... ', end='')
+    sys.stdout.flush()
+    try:
+        paths = loadPaths2(pathFilename, links)
+    except Exception:
+        print('\nError: could not load ' + pathFilename, file=sys.stderr)
+        quit()
+    print('done')
+    return paths
+
+
+
 
 # This function takes a path filename and returns a dictionary.
 # The dictionary key is the contig name.
 # The dictionary value is a Path object.
-def loadPaths(pathFilename, links):
+def loadPaths2(pathFilename, links):
 
     paths = {}
 
@@ -571,11 +593,22 @@ def getReverseComplement(forwardSequence):
 
 
 
+
+def splitContigs(contigs, links, segmentSequences, graphOverlap):
+    print('Splitting contigs..... ', end='')
+    sys.stdout.flush()
+    contigs = splitContigs2(contigs, links, segmentSequences, graphOverlap)
+    addLinksToContigs(contigs, links, False, True)
+    print('done')
+    return contigs
+
+
+
 # This function splits contigs as necessary to maintain all graph connections.
 # Specifically, it looks for graph segments which are connected to the end of
 # one contig and occur in the middle of a second contig.  In such cases, the
 # second contig is split to allow for the connection.
-def splitContigs(contigs, links, segmentSequences, graphOverlap):
+def splitContigs2(contigs, links, segmentSequences, graphOverlap):
 
     # Find all missing links.  A missing link is defined as a link in the
     # assembly graph which is not represented somewhere in the contig graph.
@@ -923,6 +956,16 @@ def linkIsBetweenContigs(start, end, contigs):
     return False
 
 
+def mergeContigs(contigs, graphOverlap):
+    print('Merging contigs....... ', end='')
+    sys.stdout.flush()
+    contigs = mergeIdenticalContigs(contigs)
+    contigs = mergeLinearRuns(contigs, graphOverlap)
+    print('done')
+    return contigs
+
+
+
 # This function looks for contigs which are made of the exact same graph
 # segments as each other.
 def mergeIdenticalContigs(contigs):
@@ -1113,6 +1156,14 @@ def removeBogusLinks(contigs):
 
 
 
+def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
+    print('Calculating depth..... ', end='')
+    sys.stdout.flush()
+    recalculateContigDepths2(contigs, sequences, depths, graphOverlap)
+    print('done')
+
+
+
 # This function recalculates contig depths using the depths of the graph
 # segments which make up the contigs.
 # For this function I tried to copy what SPAdes does: it seems to define a
@@ -1120,7 +1171,7 @@ def removeBogusLinks(contigs):
 # The weight for the average is the segment length minus the overlap.
 # Notably, SPAdes does not seem to divide up the available depth for a segment
 # which appears in multiple places in the contigs, so I don't do that either.
-def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
+def recalculateContigDepths2(contigs, sequences, depths, graphOverlap):
 
     for contig in contigs:
         totalLength = 0
@@ -1155,7 +1206,11 @@ def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
 
 
 
+
 def renumberContigs(contigs):
+
+    print('Renumbering contigs... ', end='')
+    sys.stdout.flush()
 
     # Sort from contigs big to small, so contig 1 is the largest.
     positiveContigs = []
@@ -1177,6 +1232,8 @@ def renumberContigs(contigs):
 
     # Sort the contigs using their new numbers.
     contigs.sort(key=lambda contig: (contig.number, contig.getSign()))
+
+    print('done')
 
 
 # This function takes blast alignments and returns the best one.
