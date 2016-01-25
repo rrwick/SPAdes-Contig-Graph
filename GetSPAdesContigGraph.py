@@ -62,7 +62,7 @@ def main():
     print('Building graph........ ', end='')
     sys.stdout.flush()
     addPathsToContigs(contigs, paths)
-    addLinksToContigs(contigs, links)
+    addLinksToContigs(contigs, links, True, False)
     print('done')
 
     # If the user chose to prioritise connections, then some graph
@@ -82,13 +82,13 @@ def main():
             quit()
         graphOverlap = getGraphOverlap(links, segmentSequences)
         contigs = splitContigs(contigs, links, segmentSequences, graphOverlap)
-        addLinksToContigs(contigs, links)
+        addLinksToContigs(contigs, links, False, True)
         print('done')
 
-        print('Removing duplicates... ', end='')
+        print('Merging contigs....... ', end='')
         sys.stdout.flush()
-        contigs = removeDuplicateContigs(contigs)
-        addLinksToContigs(contigs, links)
+        contigs = mergeIdenticalContigs(contigs)
+        contigs = mergeLinearRuns(contigs, graphOverlap)
         print('done')
 
         print('Calculating depth..... ', end='')
@@ -98,8 +98,7 @@ def main():
 
         print('Renumbering contigs... ', end='')
         sys.stdout.flush()
-        contigs = renumberContigs(contigs)
-        addLinksToContigs(contigs, links)
+        renumberContigs(contigs)
         print('done')
 
     # Output the graph to file
@@ -452,12 +451,23 @@ def addPathsToContigs(contigs, paths):
 
 # This function uses the contents of the contig paths to add link
 # information to the contigs.
-def addLinksToContigs(contigs, links):
+def addLinksToContigs(contigs, links, clear, deadEndsOnly):
 
-    # Clear any existing link information.
-    for contig in contigs:
-        contig.outgoingLinkedContigs = []
-        contig.incomingLinkedContigs = []
+    if clear:
+        for contig in contigs:
+            contig.outgoingLinkedContigs = []
+            contig.incomingLinkedContigs = []
+
+    # If we are only adding links for dead ends, then we make sets to easily
+    # tell if a contig has no connections.
+    if deadEndsOnly:
+        noOutgoingLinks = set()
+        noIncomingLinks = set()
+        for contig in contigs:
+            if not contig.outgoingLinkedContigs:
+                noOutgoingLinks.add(contig)
+            if not contig.incomingLinkedContigs:
+                noIncomingLinks.add(contig)
 
     # For each contig, we take the last graph segment, find the segments that
     # it leads to, and then find the contigs which start with that next
@@ -466,11 +476,13 @@ def addLinksToContigs(contigs, links):
         outgoingLinkedContigs = set()
         endingSegment = contig1.getEndingSegment()
         followingSegments = links[endingSegment]
-        linkedContigs = []
+
         for followingSegment in followingSegments:
             for contig2 in contigs:
                 startingSegment = contig2.getStartingSegment()
                 if followingSegment == startingSegment:
+                    if deadEndsOnly and contig1 not in noOutgoingLinks and contig2 not in noIncomingLinks:
+                        continue
                     contig1.outgoingLinkedContigs.append(contig2)
                     contig2.incomingLinkedContigs.append(contig1)
 
@@ -626,15 +638,31 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
     segmentsWhichMustBeOnContigStarts = list(set(segmentsWhichMustBeOnContigStarts))
     segmentsWhichMustBeOnContigEnds = list(set(segmentsWhichMustBeOnContigEnds))
 
+    # Before we split the contigs, we need to remember all of the links present
+    # so they can be remade.
+    linksBeforeSplits = {}
+    for contig in contigs:
+        start = contig.getNumberWithSign()
+        ends = []
+        for outgoingLinkedContig in contig.outgoingLinkedContigs:
+            ends.append(outgoingLinkedContig.getNumberWithSign())
+        linksBeforeSplits[start] = ends
+
     # Now split contigs, as necessary.
     newPositiveContigs = []
     nextContigNumber = 1
+    oldNumbersToNewNumbers = {}
     for contig in contigs:
 
         # We only split positive contigs and will make the negative complement
         # after we are done.
         if not contig.isPositive():
             continue
+
+        # We need to keep track of the mapping from old contig numbers to new
+        # numbers, as this will be needed for reconnecting contigs.
+        contigNumber = contig.number
+        oldNumbersToNewNumbers[contigNumber] = []
 
         # This will contain the locations at which the contig must be split.
         # It is a list of integers which are indices for path segments that
@@ -669,6 +697,7 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
                 # they are None.
                 if contigPart1 is not None:
                     newPositiveContigs.append(contigPart2)
+                    oldNumbersToNewNumbers[contigNumber] = [contigPart2.number] + oldNumbersToNewNumbers[contigNumber]
                     contig = contigPart1
                     nextContigNumber += 1
 
@@ -683,12 +712,71 @@ def splitContigs(contigs, links, segmentSequences, graphOverlap):
         # need to renumber it.
         newPositiveContigs[-1].renumber(nextContigNumber)
         nextContigNumber += 1
+        oldNumbersToNewNumbers[contigNumber] = [newPositiveContigs[-1].number] + oldNumbersToNewNumbers[contigNumber]
 
     # Now we make the reverse complements for all of our new contigs.
     newContigs = []
     for contig in newPositiveContigs:
         newContigs.append(contig)
         newContigs.append(getReverseComplementContig(contig))
+
+    # Now we have to put together the links in new contig numbers.  First we
+    # Create the internal links between parts of a split contig.
+    linksAfterSplits = {}
+    for old, new in oldNumbersToNewNumbers.iteritems():
+        for i in range(len(new) - 1):
+            start = str(new[i]) + '+'
+            end = str(new[i+1]) + '+'
+            linksAfterSplits[start] = [end]
+            start = str(new[i+1]) + '-'
+            end = str(new[i]) + '-'
+            linksAfterSplits[start] = [end]
+
+    # Add the external links between contigs.  To do this we need to
+    # translate old contig numbers to new contig numbers.
+    for start, ends in linksBeforeSplits.iteritems():
+        startSign = start[-1]
+        startNum = int(start[:-1])
+        if startSign == '+':
+            newStartNum = oldNumbersToNewNumbers[startNum][-1]
+        else:
+            newStartNum = oldNumbersToNewNumbers[startNum][0]
+        newStart = str(newStartNum) + startSign
+        newEnds = []
+        for end in ends:
+            endSign = end[-1]
+            endNum = int(end[:-1])
+            if endSign == '+':
+                newEndNum = oldNumbersToNewNumbers[endNum][0]
+            else:
+                newEndNum = oldNumbersToNewNumbers[endNum][-1]
+            newEnd = str(newEndNum) + endSign
+            newEnds.append(newEnd)
+        linksAfterSplits[newStart] = newEnds
+
+    # Also make the links in reverse direction.
+    reverseLinksAfterSplits = {}
+    for start, ends in linksAfterSplits.iteritems():
+        for end in ends:
+            if end in reverseLinksAfterSplits:
+                reverseLinksAfterSplits[end].append(start)
+            else:
+                reverseLinksAfterSplits[end] = [start]
+
+    # Now we add the links back to our new contigs.
+    newContigDict = {}
+    for contig in newContigs:
+        newContigDict[contig.getNumberWithSign()] = contig
+    for contig in newContigs:
+        contig.incomingLinkedContigs = []
+        contig.outgoingLinkedContigs = []
+        contigNum = contig.getNumberWithSign()
+        if contigNum in linksAfterSplits:
+            for outgoingNum in linksAfterSplits[contigNum]:
+                contig.outgoingLinkedContigs.append(newContigDict[outgoingNum])
+        if contigNum in reverseLinksAfterSplits:
+            for incomingNum in reverseLinksAfterSplits[contigNum]:
+                contig.incomingLinkedContigs.append(newContigDict[incomingNum])
 
     return newContigs
 
@@ -746,7 +834,6 @@ def splitContig(contig, splitPoint, nextContigNumber):
     newContig2.addPath(newContig2Path)
 
     return newContig1, newContig2
-
 
 
 
@@ -832,93 +919,195 @@ def linkIsBetweenContigs(start, end, contigs):
                 return True
     return False
 
-# This function returns two sets of tuples:
-#  - all graph links contained within the given contigs
-#  - all graph links contained between the given contigs
-def getAllLinksBetweenContigs(contigs):
 
-    # Build a set of the contigs, as this will make it faster to check if any
-    # given contig is in the set.
-    contigSet = set(contigs)
+# This function looks for contigs which are made of the exact same graph
+# segments as each other.  
+def mergeIdenticalContigs(contigs):
 
-    internalLinks = set()
-    externalLinks = set()
+    contigGroups = []
 
+    # Group contigs into collections with the exact same segment list.
     for contig in contigs:
-
-        linksInContig = contig.path.getAllLinks()
-        for linkInContig in linksInContig:
-            internalLinks.add(linkInContig)
-
-        downstreamContigs = contig.outgoingLinkedContigs
-        for downstreamContig in downstreamContigs:
-            if downstreamContig in contigSet:
-                externalLinks.add((contig.getEndingSegment(), downstreamContig.getStartingSegment()))
-
-        upstreamContigs = contig.incomingLinkedContigs
-        for upstreamContig in upstreamContigs:
-            if upstreamContig in contigSet:
-                externalLinks.add((upstreamContig.getEndingSegment(), contig.getStartingSegment()))
-
-    return internalLinks, externalLinks
-
-
-
-
-
-# This function returns a reduced list of contigs which has no cases where one
-# contig is contained entirely within another.  However, a contig will not be
-# removed, even if it is a duplicate, if removing it would remove a graph
-# connection that is not present elsewhere in the contigs.
-def removeDuplicateContigs(contigs):
-
-    # Sort the contigs from big to small.  This ensures that containing contigs
-    # will be encountered before contained contigs.
-    sortedContigs = sorted(contigs, key=lambda contig: len(contig.sequence), reverse=True)
-
-    # Separate the contigs which contain duplicate regions of other contigs.
-    duplicateContigs = []
-    contigsNoDuplicates = []
-    for contig1 in contigs:
-        for contig2 in contigsNoDuplicates:
-            if contig2.contains(contig1):
-                duplicateContigs.append(contig1)
+        for contigGroup in contigGroups:
+            if contig.path.segmentList == contigGroup[0].path.segmentList:
+                contigGroup.append(contig)
                 break
         else:
-            contigsNoDuplicates.append(contig1)
+            contigGroups.append([contig])
 
-    # For each duplicate contig, assess whether it really does need to be
-    # included because of the links it provides.
-    # We do this by checking the graph links to and from this contig and seeing
-    # if those links are present in the rest of the graph.  If not, the contig
-    # must be included.
-    allInternalLinks, allExternalLinks = getAllLinksBetweenContigs(contigsNoDuplicates)
+    # For the first contig in each group, give it the linked contigs of its
+    # entire group.
+    oldNumberToNewContig = {}
+    newContigs = []
+    for contigGroup in contigGroups:
+        allIncomingLinkedContigNumbers = set()
+        allOutgoingLinkedContigNumbers = set()
+        firstContigInGroup = contigGroup[0]
+        for contig in contigGroup:
+            for incomingLinkedContig in contig.incomingLinkedContigs:
+                allIncomingLinkedContigNumbers.add(incomingLinkedContig.getNumberWithSign())
+            for outgoingLinkedContig in contig.outgoingLinkedContigs:
+                allOutgoingLinkedContigNumbers.add(outgoingLinkedContig.getNumberWithSign())
+            oldNumberToNewContig[contig.getNumberWithSign()] = firstContigInGroup
+        firstContigInGroup.incomingLinkedContigs = list(allIncomingLinkedContigNumbers)
+        firstContigInGroup.outgoingLinkedContigs = list(allOutgoingLinkedContigNumbers)
+        newContigs.append(firstContigInGroup)
 
-    for duplicateContig in duplicateContigs:
+    # Now for each of the new contigs, we must convert the linked contig lists
+    # from numbers to actual contigs.
+    for contig in newContigs:
+        newIncomingLinkedContigs = set()
+        newOutgoingLinkedContigs = set()
+        for incomingLinkedContigOldNumber in contig.incomingLinkedContigs:
+            newIncomingLinkedContigs.add(oldNumberToNewContig[incomingLinkedContigOldNumber])
+        for outgoingLinkedContigOldNumber in contig.outgoingLinkedContigs:
+            newOutgoingLinkedContigs.add(oldNumberToNewContig[outgoingLinkedContigOldNumber])
+        contig.incomingLinkedContigs = list(newIncomingLinkedContigs)
+        contig.outgoingLinkedContigs = list(newOutgoingLinkedContigs)
 
-        internalLinks = duplicateContig.path.getAllLinks()
-        externalLinks = duplicateContig.getLinksToOtherContigs()
+    return newContigs
 
-        hasUniqueInternalLink = False
-        hasUniqueExternalLink = False
 
-        for internalLink in internalLinks:
-            if internalLink not in allInternalLinks:
-                hasUniqueInternalLink = True
-                break
-        for externalLink in externalLinks:
-            if externalLink not in allExternalLinks:
-                hasUniqueExternalLink = True
-                break
+# This function simplifies the graph by merging simple linear runs together.
+def mergeLinearRuns(contigs, graphOverlap):
 
-        if hasUniqueInternalLink or hasUniqueExternalLink:
-            contigsNoDuplicates.append(duplicateContig)
-            for internalLink in internalLinks:
-                allInternalLinks.add(internalLink)
-            for externalLink in externalLinks:
-                allExternalLinks.add(externalLink)
+    mergeHappened = True
+    while mergeHappened:
 
-    return contigsNoDuplicates
+        contigDict = {}
+        for contig in contigs:
+            contigDict[contig.getNumberWithSign()] = contig
+
+        for contig in contigs:
+
+            # Make sure that this contig has one downstream contig and that
+            # only has one upstream contig.
+            if len(contig.outgoingLinkedContigs) != 1:
+                continue
+            nextContig = contig.outgoingLinkedContigs[0]
+            if len(nextContig.incomingLinkedContigs) != 1 or \
+               nextContig.incomingLinkedContigs[0] != contig:
+                continue
+
+            # Make sure this contig isn't just looping back to itself.
+            if contig == nextContig:
+                continue
+
+            # Make sure that the reverse complement contigs are also properly
+            # simple and linear.
+            revCompContig = contigDict[getOppositeSequenceNumber(contig.getNumberWithSign())]
+            revCompNextContig = contigDict[getOppositeSequenceNumber(nextContig.getNumberWithSign())]
+            if len(revCompNextContig.outgoingLinkedContigs) != 1 or \
+               len(revCompContig.incomingLinkedContigs) != 1 or \
+               revCompNextContig.outgoingLinkedContigs[0] != revCompContig or \
+               revCompContig.incomingLinkedContigs[0] != revCompNextContig:
+                continue
+
+            # Make sure that the contig is not simply looping back onto its own
+            # reverse complement.
+            if nextContig == revCompContig or contig == revCompNextContig:
+                continue
+
+            # If the code got here, then we can merge contig and nextContig
+            # (and their reverse complements).
+            print('\nMerging:', contig, 'and', nextContig)
+            contigs = mergeTwoContigs(contigs, graphOverlap, contig, nextContig, revCompContig, revCompNextContig)
+            break
+
+        else:
+            mergeHappened = False
+
+    return contigs
+
+
+
+def mergeTwoContigs(allContigs, graphOverlap, contig1, contig2, contig1RevComp, contig2RevComp):
+
+    largestContigNumber = 0
+    for contig in allContigs:
+        contigNum = contig.number
+        if contigNum > largestContigNumber:
+            largestContigNumber = contigNum
+    mergedContigNum = largestContigNumber + 1
+
+    mergedContigSequence = contig1.sequence[:-graphOverlap] + contig2.sequence
+    mergedContigSequenceRevComp = contig2RevComp.sequence + contig1RevComp.sequence[graphOverlap:]
+
+    mergedContigName = "NODE_" + str(mergedContigNum) + "_length_" + str(len(mergedContigSequence)) + "_cov_1.0"
+    mergedContigNameRevComp = "NODE_" + str(mergedContigNum) + "_length_" + str(len(mergedContigSequenceRevComp)) + "_cov_1.0'"
+
+    mergedContig = Contig(mergedContigName, mergedContigSequence)
+    mergedContigRevComp = Contig(mergedContigNameRevComp, mergedContigSequenceRevComp)
+
+    # Copy the connections over to the new merged contigs.
+    mergedContig.incomingLinkedContigs = contig1.incomingLinkedContigs
+    mergedContig.outgoingLinkedContigs = contig2.outgoingLinkedContigs
+    mergedContigRevComp.incomingLinkedContigs = contig2RevComp.incomingLinkedContigs
+    mergedContigRevComp.outgoingLinkedContigs = contig1RevComp.outgoingLinkedContigs
+
+    # Copy the path segments over to the new merged contigs.
+    mergedContig.path.segmentList = contig1.path.segmentList + contig2.path.segmentList
+    mergedContigRevComp.path.segmentList = contig2RevComp.path.segmentList + contig1RevComp.path.segmentList
+
+    # Build a new list of contigs, and while we're looping through, we can fix
+    # up any links to the merged contig.
+    newContigs = []
+    for contig in allContigs:
+        if contig == contig1 or contig == contig2 or contig == contig1RevComp or contig == contig2RevComp:
+            continue
+
+        newIncomingLinkedContigs = []
+        for incomingLinkedContig in contig.incomingLinkedContigs:
+            if incomingLinkedContig == contig2:
+                newIncomingLinkedContigs.append(mergedContig)
+            elif incomingLinkedContig == contig1RevComp:
+                newIncomingLinkedContigs.append(mergedContigRevComp)
+            else:
+                newIncomingLinkedContigs.append(incomingLinkedContig)
+        contig.incomingLinkedContigs = newIncomingLinkedContigs
+
+        newOutgoingLinkedContigs = []
+        for outgoingLinkedContig in contig.outgoingLinkedContigs:
+            if outgoingLinkedContig == contig1:
+                newOutgoingLinkedContigs.append(mergedContig)
+            elif outgoingLinkedContig == contig2RevComp:
+                newOutgoingLinkedContigs.append(mergedContigRevComp)
+            else:
+                newOutgoingLinkedContigs.append(outgoingLinkedContig)
+        contig.outgoingLinkedContigs = newOutgoingLinkedContigs
+
+        newContigs.append(contig)
+
+    newContigs.append(mergedContig)
+    newContigs.append(mergedContigRevComp)
+
+    return newContigs
+
+
+
+# This function is run after removeDuplicateContigs.  It goes through all of
+# the contigs' links and removes ones that are no longer valid (because their
+# destination contig has been removed as a duplicate).
+def removeBogusLinks(contigs):
+
+    contigNumSet = set()
+    for contig in contigs:
+        contigNumSet.add(contig.number)
+
+    for contig in contigs:
+        newIncomingLinkedContigs = []
+        newOutgoingLinkedContigs = []
+
+        for incomingLinkedContig in contig.incomingLinkedContigs:
+            if incomingLinkedContig.number in contigNumSet:
+                newIncomingLinkedContigs.append(incomingLinkedContig)
+        for outgoingLinkedContig in contig.outgoingLinkedContigs:
+            if outgoingLinkedContig.number in contigNumSet:
+                newOutgoingLinkedContigs.append(outgoingLinkedContig)
+
+        contig.incomingLinkedContigs = newIncomingLinkedContigs
+        contig.outgoingLinkedContigs = newOutgoingLinkedContigs
+
 
 
 
@@ -969,25 +1158,26 @@ def recalculateContigDepths(contigs, sequences, depths, graphOverlap):
 
 def renumberContigs(contigs):
 
-    # Renumber positive contigs only (we'll rebuild the negative contigs later)
+    # Sort from contigs big to small, so contig 1 is the largest.
     positiveContigs = []
     for contig in contigs:
         if contig.isPositive():
             positiveContigs.append(contig)
-
-    # Sort from big to small, so contig 1 is the largest.
     sortedContigs = sorted(positiveContigs, key=lambda contig: len(contig.sequence), reverse=True)
 
-    # Assign new numbers and create complement contigs.
-    newContigs = []
+    # Create the new number mapping.
+    oldNumToNewNum = {}
     i = 1
     for contig in sortedContigs:
-        contig.renumber(i)
+        oldNumToNewNum[contig.number] = i
         i += 1
-        newContigs.append(contig)
-        newContigs.append(getReverseComplementContig(contig))
 
-    return newContigs
+    # Assign new numbers and create complement contigs.
+    for contig in contigs:
+        contig.renumber(oldNumToNewNum[contig.number])
+
+    # Sort the contigs using their new numbers.
+    contigs.sort(key=lambda contig: (contig.number, contig.getSign()))
 
 
 # This function takes blast alignments and returns the best one.
@@ -1075,6 +1265,12 @@ class Contig:
         else:
             num += '-'
         return num
+
+    def getSign(self):
+        if self.isPositive():
+            return '+'
+        else:
+            return '-'
 
     def addPath(self, path):
         self.path = path
