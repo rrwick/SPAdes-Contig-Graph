@@ -873,8 +873,12 @@ def getGraphOverlap(links, segmentSequences):
     # Now we loop through each overlap looking at the segment pairs.
     possibleOverlaps = range(1, shortestSegmentSequence + 1)
     for start, ends in links.iteritems():
+        if start.startswith('gap'):
+            continue
         s1 = segmentSequences[start]
         for endingSegment in ends:
+            if endingSegment.startswith('gap'):
+                continue
             s2 = segmentSequences[endingSegment]
             possibleOverlaps = getPossibleOverlaps(s1, s2, possibleOverlaps)
 
@@ -1010,7 +1014,6 @@ def mergeLinearRuns(contigs, graphOverlap):
 
             # If the code got here, then we can merge contig and nextContig
             # (and their reverse complements).
-            print('\nMerging:', contig, 'and', nextContig)
             contigs = mergeTwoContigs(contigs, graphOverlap, contig, nextContig, revCompContig, revCompNextContig)
             break
 
