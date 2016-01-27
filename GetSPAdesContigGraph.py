@@ -89,56 +89,37 @@ def load_contigs(contig_filename):
     print('done')
     return contigs
 
-
-
-
-# This function takes a contig filename and returns a list of Contig objects.
-# It expects a file of just foward contigs, but it creates both forward and
-# reverse complement Contig objects.
 def load_contigs_2(contig_filename):
-
+    """
+    This function takes a contig filename and returns a list of Contig objects.
+    It expects a file of just foward contigs, but it creates both forward and
+    reverse complement Contig objects.
+    """
     contigs = []
-
-    contigFile = open(contig_filename, 'r')
-
+    contig_file = open(contig_filename, 'r')
     name = ''
     sequence = ''
-    for line in contigFile:
 
-        strippedLine = line.strip()
-
-        # Skip empty lines.
-        if len(strippedLine) == 0:
+    for line in contig_file:
+        line = line.strip()
+        if not line:
             continue
-
-        # Header lines indicate the start of a new contig.
-        if strippedLine[0] == '>':
-
-            # If a contig is currently stored, save it now.
-            if len(name) > 0:
+        if line[0] == '>': # Header line = start of new contig
+            if len(name) > 0: # If a contig is currently in memory...
                 contig = Contig(name, sequence)
                 contigs.append(contig)
-                contigs.append(getReverseComplementContig(contig))
+                contigs.append(make_reverse_complement_contig(contig))
                 name = ''
                 sequence = ''
-
-            name = strippedLine[1:]
-
-        # If not a header line, we assume this is a sequence line.
-        else:
-            sequence += strippedLine
-
-    # Save the last contig.
-    if len(name) > 0:
+            name = line[1:]
+        else: # Not a header line = sequence
+            sequence += line
+    if len(name) > 0: # Save the last contig
         contig = Contig(name, sequence)
         contigs.append(contig)
-        contigs.append(getReverseComplementContig(contig))
+        contigs.append(make_reverse_complement_contig(contig))
 
     return contigs
-
-
-
-
 
 def load_graph_links(graph_filename):
     print('Loading graph......... ', end='')
@@ -151,80 +132,67 @@ def load_graph_links(graph_filename):
     print('done')
     return links
 
-
-# This function takes a graph filename and returns a dictionary of the graph
-# links.
-# The dictionary key is the starting graph segment.
-# The dictionary value is a list of the ending graph segments.
 def load_graph_links_2(graph_filename):
-
+    """
+    This function takes a graph filename and returns a dictionary of the graph
+    links.
+    The dictionary key is the starting graph segment.
+    The dictionary value is a list of the ending graph segments.
+    """
     links = {}
-    graphFile = open(graph_filename, 'r')
+    graph_file = open(graph_filename, 'r')
 
-    for line in graphFile:
+    for line in graph_file:
         line = line.strip()
-
-        # Skip empty lines.
-        if len(line) == 0:
+        if not line:
             continue
-
-        # Skip lines that aren't headers
         if line[0] != '>':
             continue
-
-        # Remove the last semicolon
         if line[-1] == ';':
             line = line[:-1]
 
-        lineParts = line.split(':')
-
-        startingSegment = lineParts[0]
-        start = getNumberFromFullSequenceName(startingSegment)
+        line_parts = line.split(':')
+        start = get_number_from_sequence_name(line_parts[0])
         if start not in links:
             links[start] = []
-        startRevComp = getOppositeSequenceNumber(start)
-        if startRevComp not in links:
+        start_rev_comp = get_opposite_sequence_number(start)
+        if start_rev_comp not in links:
             links[start] = []
 
-        # If there are no outgoing links from this sequence, there's nothing
-        # else to do.
-        if len(lineParts) < 2:
+        if len(line_parts) < 2:
             continue
 
-        endingSegments = lineParts[1].split(',')
+        ending_segments = line_parts[1].split(',')
         ends = []
-        for endingSegment in endingSegments:
-            ends.append(getNumberFromFullSequenceName(endingSegment))
+        for ending_segment in ending_segments:
+            ends.append(get_number_from_sequence_name(ending_segment))
 
         # Add the links to the dictionary in the forward direction.
         for end in ends:
             if end not in links[start]:
                 links[start].append(end)
 
-        # Add the links to the dictionary in the reverse direction:
+        # Add the links to the dictionary in the reverse direction.
         for end in ends:
-            endRevComp = getOppositeSequenceNumber(end)
-            if endRevComp not in links:
-                links[endRevComp] = []
-            if startRevComp not in links[endRevComp]:
-                links[endRevComp].append(startRevComp)
+            end_rev_comp = get_opposite_sequence_number(end)
+            if end_rev_comp not in links:
+                links[end_rev_comp] = []
+            if start_rev_comp not in links[end_rev_comp]:
+                links[end_rev_comp].append(start_rev_comp)
 
     return links
 
-
-
 def build_graph(contigs, paths, links):
-    # Add the paths to each contig object, so each contig knows its graph path,
-    # and add the links to each contig object, turning the contigs into a
-    # graph.
+    """
+    Add the paths to each contig object, so each contig knows its graph path,
+    and add the links to each contig object, turning the contigs into a
+    graph.
+    """
     print('Building graph........ ', end='')
     sys.stdout.flush()
     addPathsToContigs(contigs, paths)
     addLinksToContigs(contigs, links, True, False)
     print('done')
-
-
-
 
 def load_graph_sequences(graph_filename):
     try:
@@ -234,56 +202,50 @@ def load_graph_sequences(graph_filename):
         quit()
     return segmentSequences, segmentDepths
 
-
-
-# This function takes a graph filename and returns two dictionaries:
-#  Graph sequences:
-#     The dictionary key is the graph segment names.
-#     The dictionary value is the graph segment sequence string.
-#  Graph depth:
-#     The dictionary key is the graph segment names.
-#     The dictionary value is the graph segment read depth (cov).
 def load_graph_sequences_2(graph_filename):
-
+    """
+    This function takes a graph filename and returns two dictionaries:
+    Graph sequences:
+      The dictionary key is the graph segment names.
+      The dictionary value is the graph segment sequence string.
+    Graph depth:
+      The dictionary key is the graph segment names.
+      The dictionary value is the graph segment read depth (cov).
+    """
     sequences = {}
     depths = {}
 
-    graphFile = open(graph_filename, 'r')
+    graph_file = open(graph_filename, 'r')
 
     name = ''
     sequence = ''
     depth = 1.0
 
-    for line in graphFile:
-
-        strippedLine = line.strip()
-
-        # Skip empty lines.
-        if len(strippedLine) == 0:
+    for line in graph_file:
+        line = line.strip()
+        if not line:
             continue
 
         # Header lines indicate the start of a new contig.
-        if strippedLine[0] == '>':
+        if line[0] == '>':
 
             # If a sequence is currently stored, save it now.
             if len(name) > 0:
                 sequences[name] = sequence
                 depths[name] = depth
-
                 name = ''
                 sequence = ''
                 depth = 1.0
 
-            if strippedLine[-1] == ';':
-                strippedLine = strippedLine[:-1]
+            if line[-1] == ';':
+                line = line[:-1]
 
-            lineParts = strippedLine.split(':')
-            segmentFullName = lineParts[0]
-            name, depth = getNumberAndDepthFromFullSequenceName(segmentFullName)
+            line_parts = line.split(':')
+            name, depth = get_number_and_depth_from_sequence_name(line_parts[0])
 
         # If not a header line, we assume this is a sequence line.
         else:
-            sequence += strippedLine
+            sequence += line
 
     # Save the last contig.
     if len(name) > 0:
@@ -292,35 +254,31 @@ def load_graph_sequences_2(graph_filename):
 
     return sequences, depths
 
-
-
-
-def load_paths(pathFilename, links):
+def load_paths(path_filename, links):
     print('Loading paths......... ', end='')
     sys.stdout.flush()
     try:
-        paths = load_paths_2(pathFilename, links)
+        paths = load_paths_2(path_filename, links)
     except Exception:
-        print('\nError: could not load ' + pathFilename, file=sys.stderr)
+        print('\nError: could not load ' + path_filename, file=sys.stderr)
         quit()
     print('done')
     return paths
 
-
-
-
-# This function takes a path filename and returns a dictionary.
-# The dictionary key is the contig name.
-# The dictionary value is a Path object.
-def load_paths_2(pathFilename, links):
+def load_paths_2(path_filename, links):
+    """
+    This function takes a path filename and returns a dictionary.
+    The dictionary key is the contig name.
+    The dictionary value is a Path object.
+    """
 
     paths = {}
 
-    pathFile = open(pathFilename, 'r')
+    path_file = open(path_filename, 'r')
 
     contigNumber = ''
     pathSegments = []
-    for line in pathFile:
+    for line in path_file:
 
         line = line.strip()
 
@@ -338,8 +296,8 @@ def load_paths_2(pathFilename, links):
                 pathSegments = []
 
             positive = line[-1] != "'"
-            lineParts = line.split('_')
-            contigNumber = lineParts[1]
+            line_parts = line.split('_')
+            contigNumber = line_parts[1]
             if positive:
                 contigNumber += '+'
             else:
@@ -393,39 +351,29 @@ def load_paths_2(pathFilename, links):
 
     return paths
 
-
-
-
-def getNumberFromFullSequenceName(fullSequenceName):
-    nameParts = fullSequenceName.split('_')
+def get_number_from_sequence_name(sequence_name):
+    nameParts = sequence_name.split('_')
     number = nameParts[1]
-    if fullSequenceName[-1] == "'":
+    if sequence_name[-1] == "'":
         number += '-'
     else:
         number += '+'
-
     return number
 
-
-def getNumberAndDepthFromFullSequenceName(fullSequenceName):
-    nameParts = fullSequenceName.split('_')
+def get_number_and_depth_from_sequence_name(sequence_name):
+    nameParts = sequence_name.split('_')
     number = nameParts[1]
-    if fullSequenceName[-1] == "'":
+    if sequence_name[-1] == "'":
         number += '-'
     else:
         number += '+'
-
     depthString = nameParts[5]
     if depthString[-1] == "'":
         depthString = depthString[:-1]
     depth = float(depthString)
-
     return number, depth
 
-
-
-
-def getOppositeSequenceNumber(number):
+def get_opposite_sequence_number(number):
     if number[-1] == '+':
         return number[0:-1] + '-'
     else:
@@ -490,7 +438,7 @@ def addLinksToContigs(contigs, links, clear, deadEndsOnly):
 
 
 # This function takes a contig and returns its reverse complement contig.
-def getReverseComplementContig(contig):
+def make_reverse_complement_contig(contig):
 
     revCompContigFullname = contig.fullname
 
@@ -513,7 +461,7 @@ def getReverseComplementContig(contig):
 def getReverseComplementPath(path):
     revSegmentList = []
     for segment in reversed(path.segmentList):
-        revSegmentList.append(getOppositeSequenceNumber(segment))
+        revSegmentList.append(get_opposite_sequence_number(segment))
     return Path(revSegmentList)
 
 
@@ -624,7 +572,7 @@ def splitContigs2(contigs, links, segmentSequences, graph_overlap):
         if not contig.outgoingLinkedContigs:
             deadEndEnd = contig.getEndingSegment()
             deadEndEndSegments.append(deadEndEnd)
-            deadEndStartSegments.append(getOppositeSequenceNumber(deadEndEnd))
+            deadEndStartSegments.append(get_opposite_sequence_number(deadEndEnd))
 
     # Find all graph segments which are connected to these dead end segments.
     # These will need to be on contig ends, to allow for these connections.
@@ -721,7 +669,7 @@ def splitContigs2(contigs, links, segmentSequences, graph_overlap):
     newContigs = []
     for contig in newPositiveContigs:
         newContigs.append(contig)
-        newContigs.append(getReverseComplementContig(contig))
+        newContigs.append(make_reverse_complement_contig(contig))
 
     # Now we have to put together the links in new contig numbers.  First we
     # Create the internal links between parts of a split contig.
@@ -1012,8 +960,8 @@ def mergeLinearRuns(contigs, graph_overlap):
 
             # Make sure that the reverse complement contigs are also properly
             # simple and linear.
-            revCompContig = contigDict[getOppositeSequenceNumber(contig.getNumberWithSign())]
-            revCompNextContig = contigDict[getOppositeSequenceNumber(nextContig.getNumberWithSign())]
+            revCompContig = contigDict[get_opposite_sequence_number(contig.getNumberWithSign())]
+            revCompNextContig = contigDict[get_opposite_sequence_number(nextContig.getNumberWithSign())]
             if len(revCompNextContig.outgoingLinkedContigs) != 1 or \
                len(revCompContig.incomingLinkedContigs) != 1 or \
                revCompNextContig.outgoingLinkedContigs[0] != revCompContig or \
@@ -1152,13 +1100,13 @@ def recalculate_contig_depths(contigs, sequences, depths, graph_overlap):
             if segment in depths:
                 depth = depths[segment]
             else:
-                depth = depths[getOppositeSequenceNumber(segment)]
+                depth = depths[get_opposite_sequence_number(segment)]
             adjustedDepth = depth
 
             if segment in sequences:
                 length = len(sequences[segment])
             else:
-                length = len(sequences[getOppositeSequenceNumber(segment)])
+                length = len(sequences[get_opposite_sequence_number(segment)])
             adjustedLength = length - graph_overlap
 
             totalLength += adjustedLength
