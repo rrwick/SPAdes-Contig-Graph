@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """
-GetSPAdesContigGraph
+SPAdes Contig Graph
 
 This is a tool to combine the assembly graph and contigs made by the SPAdes
 assembler.  For more information, go to:
-https://github.com/rrwick/GetSPAdesContigGraph
+https://github.com/rrwick/spades_contig_graph
 
 Author: Ryan Wick
 email: rrwick@gmail.com
@@ -41,7 +41,7 @@ def main():
         save_paths_to_file(contigs, args.paths_out)
 
 def get_arguments():
-    parser = argparse.ArgumentParser(description='GetSPAdesContigGraph: a tool for creating FASTG contig graphs from SPAdes assemblies')
+    parser = argparse.ArgumentParser(description='SPAdes Contig Graph: a tool for creating FASTG contig graphs from SPAdes assemblies')
     parser.add_argument('graph', help='The assembly_graph.fastg file made by SPAdes')
     parser.add_argument('contigs', help='A contigs or scaffolds fasta file made by SPAdes')
     parser.add_argument('paths', help='The paths file which corresponds to the contigs or scaffolds file')
@@ -1209,13 +1209,13 @@ class Contig:
         This information is necessary before the contig can be split.
         """
         # Create a temporary directory for doing BLAST searches.
-        if not os.path.exists('GetSPAdesContigGraph-temp'):
-            os.makedirs('GetSPAdesContigGraph-temp')
+        if not os.path.exists('spades_contig_graph-temp'):
+            os.makedirs('spades_contig_graph-temp')
 
-        save_sequence_to_fasta_file(self.sequence, self.fullname, 'GetSPAdesContigGraph-temp/contig.fasta')
+        save_sequence_to_fasta_file(self.sequence, self.fullname, 'spades_contig_graph-temp/contig.fasta')
 
         # Create a BLAST database for the contig.
-        makeblastdb_command = ['makeblastdb', '-dbtype', 'nucl', '-in', 'GetSPAdesContigGraph-temp/contig.fasta']
+        makeblastdb_command = ['makeblastdb', '-dbtype', 'nucl', '-in', 'spades_contig_graph-temp/contig.fasta']
         process = subprocess.Popen(makeblastdb_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, err = process.communicate()
 
@@ -1243,11 +1243,11 @@ class Contig:
             segment_sequence = segment_sequences[segment]
             segment_length = len(segment_sequence)
 
-            save_sequence_to_fasta_file(segment_sequence, segment, 'GetSPAdesContigGraph-temp/segment.fasta')
+            save_sequence_to_fasta_file(segment_sequence, segment, 'spades_contig_graph-temp/segment.fasta')
 
             # BLAST for the segment in the contig
             sys.stdout.flush()
-            blastn_command = ['blastn', '-task', 'blastn', '-db', 'GetSPAdesContigGraph-temp/contig.fasta', '-query', 'GetSPAdesContigGraph-temp/segment.fasta', '-outfmt', '6 length pident sstart send qstart qend']
+            blastn_command = ['blastn', '-task', 'blastn', '-db', 'spades_contig_graph-temp/contig.fasta', '-query', 'spades_contig_graph-temp/segment.fasta', '-outfmt', '6 length pident sstart send qstart qend']
             process = subprocess.Popen(blastn_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = process.communicate()
 
@@ -1292,9 +1292,9 @@ class Contig:
             elif expected_segment_start_in_contig is not None:
                 expected_segment_start_in_contig += (segment_length - graph_overlap)
 
-            os.remove('GetSPAdesContigGraph-temp/segment.fasta')
+            os.remove('spades_contig_graph-temp/segment.fasta')
 
-        shutil.rmtree('GetSPAdesContigGraph-temp')
+        shutil.rmtree('spades_contig_graph-temp')
 
         # Now we have to go back and assign contig start/end positions for any
         # gap segments.

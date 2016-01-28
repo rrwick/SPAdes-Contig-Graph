@@ -1,10 +1,10 @@
-# GetSPAdesContigGraph
+# SPAdes Contig Graph
 
 This tool produces a fastg graph from either the contigs or scaffolds from a [SPAdes](http://bioinf.spbau.ru/spades) assembly.  It uses the sequences from the contigs/scaffolds fasta file and adds connections that it infers from the assembly_graph.fastg file and the paths file.
 
 The sequences in a contigs/scaffolds file made by SPAdes contains longer sequences than the assembly_graph.fastg file, due to repeat resolution and scaffolding.  However, the assembly_graph.fastg file contains connections between sequences, which can be useful for analysing assemblies in [Bandage](http://rrwick.github.io/Bandage/).  This tool combines the two to create a fastg file with both longer sequences and connections.
 
-GetSPAdesContigGraph requires an assembly from SPAdes 3.6.2 or later, as this is the version of SPAdes which introduced the paths files.
+SPAdes Contig Graph requires an assembly from SPAdes 3.6.2 or later, as this is the version of SPAdes which introduced the paths files.
 
 
 
@@ -26,17 +26,17 @@ In this mode, the program first produces a contig graph like in length priority 
 
 ## Usage
 
-```GetSPAdesContigGraph.py [-h] [-p PATHS_OUT] (-c | -l) graph contigs paths output```
+```spades_contig_graph.py [-h] [-p PATHS_OUT] (-c | -l) graph contigs paths output```
 
 When run in connection priority mode, this script requires BLAST to be installed (specifically it uses `makeblastdb` and `blastn`).
 
 Example usage:
 
 Produce a length-priority contig graph from SPAdes contigs:
-`GetSPAdesContigGraph.py -l assembly_graph.fastg contigs.fasta contigs.paths -o contigs.fastg`
+`spades_contig_graph.py -l assembly_graph.fastg contigs.fasta contigs.paths -o contigs.fastg`
 
 Produce a connection-priority contig graph from SPAdes scaffolds and also save the paths file for this graph:
-`GetSPAdesContigGraph.py -c -p scaffolds.paths assembly_graph.fastg scaffolds.fasta scaffolds.paths scaffolds.fastg
+`spades_contig_graph.py -c -p scaffolds.paths assembly_graph.fastg scaffolds.fasta scaffolds.paths scaffolds.fastg
 
 
 
@@ -49,7 +49,7 @@ To illustrate why, consider the following example (described by SPAdes author An
 * There are two connections in the graph: A -> B and C -> B.
 * SPAdes makes two contigs from the graph: AB and C.
 
-If you then used GetSPAdesContigGraph in length priority mode on this example, there would be no connections.  The A -> B connection is already included in a contig and the C -> B connection has nowhere to attach.  If, however, you used the program in connection priority mode, the AB contig would be split into two contigs (A and B) to allow for C to attach.  In this simple case, the result is no better than the original assembly graph.
+If you then used SPAdes Contig Graph in length priority mode on this example, there would be no connections.  The A -> B connection is already included in a contig and the C -> B connection has nowhere to attach.  If, however, you used the program in connection priority mode, the AB contig would be split into two contigs (A and B) to allow for C to attach.  In this simple case, the result is no better than the original assembly graph.
 
 Therefore, when using this tool, please keep in mind that the contig graphs it generates may not contain the full complexity of the assembly graph.  In complex or ambiguous cases, it is recommended to use the SPAdes assembly graph.
 
