@@ -8,8 +8,8 @@ https://github.com/rrwick/GetSPAdesContigGraph
 
 Author: Ryan Wick
 email: rrwick@gmail.com
-
 """
+
 from __future__ import division
 from __future__ import print_function
 import sys
@@ -57,8 +57,8 @@ def save_graph_to_file(contigs, graph_filename):
     sys.stdout.flush()
     output_file = open(graph_filename, 'w')
     for contig in contigs:
-        output_file.write(contig.getHeaderWithLinks())
-        output_file.write(contig.getSequenceWithLineBreaks())
+        output_file.write(contig.get_header_with_links())
+        output_file.write(contig.get_sequence_with_line_breaks())
     print('done')
 
 def save_paths_to_file(contigs, paths_filename):
@@ -67,7 +67,7 @@ def save_paths_to_file(contigs, paths_filename):
     output_paths_file = open(paths_filename, 'w')
     for contig in contigs:
         output_paths_file.write(contig.fullname + '\n')
-        output_paths_file.write(contig.path.getPathsWithLineBreaks())
+        output_paths_file.write(contig.path.get_paths_with_line_breaks())
     print('done')
 
 def check_for_blast():
@@ -190,17 +190,17 @@ def build_graph(contigs, paths, links):
     """
     print('Building graph........ ', end='')
     sys.stdout.flush()
-    addPathsToContigs(contigs, paths)
-    addLinksToContigs(contigs, links, True, False)
+    add_paths_to_contigs(contigs, paths)
+    add_links_to_contigs(contigs, links, True, False)
     print('done')
 
 def load_graph_sequences(graph_filename):
     try:
-        segmentSequences, segmentDepths = load_graph_sequences_2(graph_filename)
+        segment_sequences, segment_depths = load_graph_sequences_2(graph_filename)
     except Exception:
         print('\nError: could not determine graph sequences and depths', file=sys.stderr)
         quit()
-    return segmentSequences, segmentDepths
+    return segment_sequences, segment_depths
 
 def load_graph_sequences_2(graph_filename):
     """
@@ -271,89 +271,84 @@ def load_paths_2(path_filename, links):
     The dictionary key is the contig name.
     The dictionary value is a Path object.
     """
-
     paths = {}
-
     path_file = open(path_filename, 'r')
+    contig_number = ''
+    path_segments = []
 
-    contigNumber = ''
-    pathSegments = []
     for line in path_file:
-
         line = line.strip()
-
-        # Skip empty lines.
-        if len(line) == 0:
+        if not line:
             continue
 
         # Lines starting with 'NODE' are the start of a new path
         if len(line) > 3 and line[0:4] == 'NODE':
 
             # If a path is currently stored, save it now.
-            if len(contigNumber) > 0:
-                paths[contigNumber] = Path(pathSegments)
-                contigNumber = ''
-                pathSegments = []
+            if len(contig_number) > 0:
+                paths[contig_number] = Path(path_segments)
+                contig_number = ''
+                path_segments = []
 
             positive = line[-1] != "'"
             line_parts = line.split('_')
-            contigNumber = line_parts[1]
+            contig_number = line_parts[1]
             if positive:
-                contigNumber += '+'
+                contig_number += '+'
             else:
-                contigNumber += '-'
+                contig_number += '-'
 
         # If not a node name line, we assume this is a path line.
         else:
-            pathLine = line
+            path_line = line
 
             # Replace a semicolon at the end of a line with a placeholder
             # segment called 'gap_SEG' where SEG will be the name of the
             # preceding segment.
-            if pathLine[-1] == ';':
-                pathLine = pathLine[0:-1]
-                if contigNumber.endswith('+'):
-                    pathLine += ',gap_POS'
+            if path_line[-1] == ';':
+                path_line = path_line[0:-1]
+                if contig_number.endswith('+'):
+                    path_line += ',gap_POS'
                 else:
-                    pathLine += ',gap_NEG'
+                    path_line += ',gap_NEG'
 
             # Add the path to the path list
-            if len(pathLine) > 0:
-                pathSegments.extend(pathLine.split(','))
+            if len(path_line) > 0:
+                path_segments.extend(path_line.split(','))
 
     # Save the last contig.
-    if len(contigNumber) > 0:
-        paths[contigNumber] = Path(pathSegments)
+    if len(contig_number) > 0:
+        paths[contig_number] = Path(path_segments)
 
     # Now we go through the paths and rename our gap segments.  Anything named
     # gap_POS will get the name of the preceding path segment.  Anything named
     # gap_NEG will get the name of the following path segment.
     for path in paths.itervalues():
-        for i in range(len(path.segmentList)):
-            segment = path.segmentList[i]
+        for i in range(len(path.segment_list)):
+            segment = path.segment_list[i]
             if segment == 'gap_POS':
-                path.segmentList[i] = 'gap_' + path.segmentList[i-1]
+                path.segment_list[i] = 'gap_' + path.segment_list[i-1]
             elif segment == 'gap_NEG':
-                path.segmentList[i] = 'gap_' + path.segmentList[i+1]
+                path.segment_list[i] = 'gap_' + path.segment_list[i+1]
 
     # Now we must go through all of the paths we just made and add any links
     # for new gap segments.
     for path in paths.itervalues():
-        for i in range(len(path.segmentList) - 1):
+        for i in range(len(path.segment_list) - 1):
             j = i + 1
-            s1 = path.segmentList[i]
-            s2 = path.segmentList[j]
-            if s1.startswith('gap') or s2.startswith('gap'):
-                if s1 in links:
-                    links[s1].append(s2)
+            s_1 = path.segment_list[i]
+            s_2 = path.segment_list[j]
+            if s_1.startswith('gap') or s_2.startswith('gap'):
+                if s_1 in links:
+                    links[s_1].append(s_2)
                 else:
-                    links[s1] = [s2]
+                    links[s_1] = [s_2]
 
     return paths
 
 def get_number_from_sequence_name(sequence_name):
-    nameParts = sequence_name.split('_')
-    number = nameParts[1]
+    name_parts = sequence_name.split('_')
+    number = name_parts[1]
     if sequence_name[-1] == "'":
         number += '-'
     else:
@@ -361,16 +356,16 @@ def get_number_from_sequence_name(sequence_name):
     return number
 
 def get_number_and_depth_from_sequence_name(sequence_name):
-    nameParts = sequence_name.split('_')
-    number = nameParts[1]
+    name_parts = sequence_name.split('_')
+    number = name_parts[1]
     if sequence_name[-1] == "'":
         number += '-'
     else:
         number += '+'
-    depthString = nameParts[5]
-    if depthString[-1] == "'":
-        depthString = depthString[:-1]
-    depth = float(depthString)
+    depth_string = name_parts[5]
+    if depth_string[-1] == "'":
+        depth_string = depth_string[:-1]
+    depth = float(depth_string)
     return number, depth
 
 def get_opposite_sequence_number(number):
@@ -379,468 +374,443 @@ def get_opposite_sequence_number(number):
     else:
         return number[0:-1] + '+'
 
-
-
-# This function adds the path information to the contig objects, so each contig
-# knows its graph path.
-def addPathsToContigs(contigs, paths):
+def add_paths_to_contigs(contigs, paths):
+    """
+    This function adds the path information to the contig objects, so each contig
+    knows its graph path.
+    """
     for contig in contigs:
-        contig.addPath(paths[contig.getNumberWithSign()])
+        contig.add_path(paths[contig.get_number_with_sign()])
 
-
-
-
-# This function uses the contents of the contig paths to add link
-# information to the contigs.
-def addLinksToContigs(contigs, links, clear, deadEndsOnly):
-
+def add_links_to_contigs(contigs, links, clear, dead_ends_only):
+    """
+    This function uses the contents of the contig paths to add link
+    information to the contigs.
+    """
     if clear:
         for contig in contigs:
-            contig.outgoingLinkedContigs = []
-            contig.incomingLinkedContigs = []
+            contig.outgoing_linked_contigs = []
+            contig.incoming_linked_contigs = []
 
     # If we are only adding links for dead ends, then we make sets to easily
     # tell if a contig has no connections.
-    if deadEndsOnly:
-        noOutgoingLinks = set()
-        noIncomingLinks = set()
+    if dead_ends_only:
+        no_outgoing_links = set()
+        no_incoming_links = set()
         for contig in contigs:
-            if not contig.outgoingLinkedContigs:
-                noOutgoingLinks.add(contig)
-            if not contig.incomingLinkedContigs:
-                noIncomingLinks.add(contig)
+            if not contig.outgoing_linked_contigs:
+                no_outgoing_links.add(contig)
+            if not contig.incoming_linked_contigs:
+                no_incoming_links.add(contig)
 
     # For each contig, we take the last graph segment, find the segments that
     # it leads to, and then find the contigs which start with that next
     # segment.  These make up the links to the current contig.
-    for contig1 in contigs:
-        endingSegment = contig1.getEndingSegment()
-        followingSegments = links[endingSegment]
+    for contig_1 in contigs:
+        ending_segment = contig_1.get_ending_segment()
+        following_segments = links[ending_segment]
 
-        for followingSegment in followingSegments:
-            for contig2 in contigs:
-                startingSegment = contig2.getStartingSegment()
-                if followingSegment == startingSegment:
-                    if deadEndsOnly and contig1 not in noOutgoingLinks and contig2 not in noIncomingLinks:
+        for following_segment in following_segments:
+            for contig_2 in contigs:
+                starting_segment = contig_2.get_starting_segment()
+                if following_segment == starting_segment:
+                    if dead_ends_only and contig_1 not in no_outgoing_links and contig_2 not in no_incoming_links:
                         continue
-                    contig1.outgoingLinkedContigs.append(contig2)
-                    contig2.incomingLinkedContigs.append(contig1)
+                    contig_1.outgoing_linked_contigs.append(contig_2)
+                    contig_2.incoming_linked_contigs.append(contig_1)
 
     # This process can create duplicate linked contigs, so we now go through
     # them to remove the duplicates.
     for contig in contigs:
-        contig.outgoingLinkedContigs = list(set(contig.outgoingLinkedContigs))
-        contig.incomingLinkedContigs = list(set(contig.incomingLinkedContigs))
+        contig.outgoing_linked_contigs = list(set(contig.outgoing_linked_contigs))
+        contig.incoming_linked_contigs = list(set(contig.incoming_linked_contigs))
 
-
-
-
-
-
-# This function takes a contig and returns its reverse complement contig.
 def make_reverse_complement_contig(contig):
-
-    revCompContigFullname = contig.fullname
+    """
+    This function takes a contig and returns its reverse complement contig.
+    """
+    rev_comp_contig_fullname = contig.fullname
 
     # Add or remove the ' as necessary
-    if revCompContigFullname[-1] == "'":
-        revCompContigFullname = revCompContigFullname[0:-1]
+    if rev_comp_contig_fullname[-1] == "'":
+        rev_comp_contig_fullname = rev_comp_contig_fullname[0:-1]
     else:
-        revCompContigFullname = revCompContigFullname + "'"
+        rev_comp_contig_fullname = rev_comp_contig_fullname + "'"
 
-    revCompSequence = getReverseComplement(contig.sequence)
-    revCompContig = Contig(revCompContigFullname, revCompSequence)
+    rev_comp_sequence = make_reverse_complement_sequence(contig.sequence)
+    rev_comp_contig = Contig(rev_comp_contig_fullname, rev_comp_sequence)
+    rev_comp_contig.path = make_reverse_complement_path(contig.path)
 
-    # Get the path's reverse complement.
-    revCompPath = getReverseComplementPath(contig.path)
-    revCompContig.path = revCompPath
+    return rev_comp_contig
 
-    return revCompContig
+def make_reverse_complement_path(path):
+    rev_segment_list = []
+    for segment in reversed(path.segment_list):
+        rev_segment_list.append(get_opposite_sequence_number(segment))
+    return Path(rev_segment_list)
 
+def make_reverse_complement_sequence(forward_sequence):
+    rev_comp = ''
+    for i in reversed(range(len(forward_sequence))):
+        base = forward_sequence[i]
+        if base == 'A': rev_comp += 'T'
+        elif base == 'T': rev_comp += 'A'
+        elif base == 'G': rev_comp += 'C'
+        elif base == 'C': rev_comp += 'G'
+        elif base == 'a': rev_comp += 't'
+        elif base == 't': rev_comp += 'a'
+        elif base == 'g': rev_comp += 'c'
+        elif base == 'c': rev_comp += 'g'
+        elif base == 'R': rev_comp += 'Y'
+        elif base == 'Y': rev_comp += 'R'
+        elif base == 'S': rev_comp += 'S'
+        elif base == 'W': rev_comp += 'W'
+        elif base == 'K': rev_comp += 'M'
+        elif base == 'M': rev_comp += 'K'
+        elif base == 'r': rev_comp += 'y'
+        elif base == 'y': rev_comp += 'r'
+        elif base == 's': rev_comp += 's'
+        elif base == 'w': rev_comp += 'w'
+        elif base == 'k': rev_comp += 'm'
+        elif base == 'm': rev_comp += 'k'
+        elif base == 'B': rev_comp += 'V'
+        elif base == 'D': rev_comp += 'H'
+        elif base == 'H': rev_comp += 'D'
+        elif base == 'V': rev_comp += 'B'
+        elif base == 'b': rev_comp += 'v'
+        elif base == 'd': rev_comp += 'h'
+        elif base == 'h': rev_comp += 'd'
+        elif base == 'v': rev_comp += 'b'
+        elif base == 'N': rev_comp += 'N'
+        elif base == 'n': rev_comp += 'n'
+        elif base == '.': rev_comp += '.'
+        elif base == '-': rev_comp += '-'
+        elif base == '?': rev_comp += '?'
+        else: rev_comp += 'N'
+    return rev_comp
 
-def getReverseComplementPath(path):
-    revSegmentList = []
-    for segment in reversed(path.segmentList):
-        revSegmentList.append(get_opposite_sequence_number(segment))
-    return Path(revSegmentList)
-
-
-
-
-def getReverseComplement(forwardSequence):
-
-    reverseComplement = ''
-    for i in reversed(range(len(forwardSequence))):
-        base = forwardSequence[i]
-
-        if base == 'A': reverseComplement += 'T'
-        elif base == 'T': reverseComplement += 'A'
-        elif base == 'G': reverseComplement += 'C'
-        elif base == 'C': reverseComplement += 'G'
-        elif base == 'a': reverseComplement += 't'
-        elif base == 't': reverseComplement += 'a'
-        elif base == 'g': reverseComplement += 'c'
-        elif base == 'c': reverseComplement += 'g'
-        elif base == 'R': reverseComplement += 'Y'
-        elif base == 'Y': reverseComplement += 'R'
-        elif base == 'S': reverseComplement += 'S'
-        elif base == 'W': reverseComplement += 'W'
-        elif base == 'K': reverseComplement += 'M'
-        elif base == 'M': reverseComplement += 'K'
-        elif base == 'r': reverseComplement += 'y'
-        elif base == 'y': reverseComplement += 'r'
-        elif base == 's': reverseComplement += 's'
-        elif base == 'w': reverseComplement += 'w'
-        elif base == 'k': reverseComplement += 'm'
-        elif base == 'm': reverseComplement += 'k'
-        elif base == 'B': reverseComplement += 'V'
-        elif base == 'D': reverseComplement += 'H'
-        elif base == 'H': reverseComplement += 'D'
-        elif base == 'V': reverseComplement += 'B'
-        elif base == 'b': reverseComplement += 'v'
-        elif base == 'd': reverseComplement += 'h'
-        elif base == 'h': reverseComplement += 'd'
-        elif base == 'v': reverseComplement += 'b'
-        elif base == 'N': reverseComplement += 'N'
-        elif base == 'n': reverseComplement += 'n'
-        elif base == '.': reverseComplement += '.'
-        elif base == '-': reverseComplement += '-'
-        elif base == '?': reverseComplement += '?'
-        else: reverseComplement += 'N'
-
-    return reverseComplement
-
-
-
-
-def split_contigs(contigs, links, segmentSequences, graph_overlap):
+def split_contigs(contigs, links, segment_sequences, graph_overlap):
     print('Splitting contigs..... ', end='')
     sys.stdout.flush()
-    contigs = splitContigs2(contigs, links, segmentSequences, graph_overlap)
-    addLinksToContigs(contigs, links, False, True)
+    contigs = split_contigs_2(contigs, links, segment_sequences, graph_overlap)
+    add_links_to_contigs(contigs, links, False, True)
     print('done')
     return contigs
 
-
-
-# This function splits contigs as necessary to maintain all graph connections.
-# Specifically, it looks for graph segments which are connected to the end of
-# one contig and occur in the middle of a second contig.  In such cases, the
-# second contig is split to allow for the connection.
-def splitContigs2(contigs, links, segmentSequences, graph_overlap):
+def split_contigs_2(contigs, links, segment_sequences, graph_overlap):
+    """
+    This function splits contigs as necessary to maintain all graph connections.
+    Specifically, it looks for graph segments which are connected to the end of
+    one contig and occur in the middle of a second contig.  In such cases, the
+    second contig is split to allow for the connection.
+    """
 
     # Find all missing links.  A missing link is defined as a link in the
     # assembly graph which is not represented somewhere in the contig graph.
     # 'Represented somewhere' includes both within a contig and between two
     # linked contigs.
-    linksInContigs = set()
+    links_in_contigs = set()
     for contig in contigs:
-        linksInContig = contig.getLinksInThisContigAndToOtherContigs()
-        for link in linksInContig:
-            linksInContigs.add(link)
-    allGraphLinks = set()
+        links_in_contig = contig.get_links_in_this_contig_and_to_other_contigs()
+        for link in links_in_contig:
+            links_in_contigs.add(link)
+    all_graph_links = set()
     for start, ends in links.iteritems():
         for end in ends:
-            allGraphLinks.add((start, end))
-    missingLinks = []
-    for graphLink in allGraphLinks:
-        if graphLink not in linksInContigs:
-            missingLinks.append(graphLink)
+            all_graph_links.add((start, end))
+    missing_links = []
+    for graph_link in all_graph_links:
+        if graph_link not in links_in_contigs:
+            missing_links.append(graph_link)
 
     # In order for these links to be present in the graph, we need to split
     # contigs such that the start segments of missing links are on the ends
     # of contigs and the end segments of missing links are on the starts of
     # contigs.
-    segmentsWhichMustBeOnContigEnds = []
-    segmentsWhichMustBeOnContigStarts = []
-    for missingLink in missingLinks:
-        segmentsWhichMustBeOnContigEnds.append(missingLink[0])
-        segmentsWhichMustBeOnContigStarts.append(missingLink[1])
+    segments_which_must_be_on_contig_ends = []
+    segments_which_must_be_on_contig_starts = []
+    for missing_link in missing_links:
+        segments_which_must_be_on_contig_ends.append(missing_link[0])
+        segments_which_must_be_on_contig_starts.append(missing_link[1])
 
     # Create a reverse links dictionary.
-    reverseLinks = {}
+    reverse_links = {}
     for start, ends in links.iteritems():
         for end in ends:
-            if end not in reverseLinks:
-                reverseLinks[end] = []
-            reverseLinks[end].append(start)
+            if end not in reverse_links:
+                reverse_links[end] = []
+            reverse_links[end].append(start)
 
     # Compile lists of all segments which reside on contigs dead ends.
-    deadEndEndSegments = []
-    deadEndStartSegments = []
+    dead_end_end_segments = []
+    dead_end_start_segments = []
     for contig in contigs:
-        if not contig.outgoingLinkedContigs:
-            deadEndEnd = contig.getEndingSegment()
-            deadEndEndSegments.append(deadEndEnd)
-            deadEndStartSegments.append(get_opposite_sequence_number(deadEndEnd))
+        if not contig.outgoing_linked_contigs:
+            dead_end_end = contig.get_ending_segment()
+            dead_end_end_segments.append(dead_end_end)
+            dead_end_start_segments.append(get_opposite_sequence_number(dead_end_end))
 
     # Find all graph segments which are connected to these dead end segments.
     # These will need to be on contig ends, to allow for these connections.
-    segmentsWhichMustBeOnContigEnds = []
-    for segment in deadEndStartSegments:
-        if segment in reverseLinks:
-            segmentsWhichMustBeOnContigEnds.extend(reverseLinks[segment])
-    segmentsWhichMustBeOnContigStarts = []
-    for segment in deadEndEndSegments:
+    segments_which_must_be_on_contig_ends = []
+    for segment in dead_end_start_segments:
+        if segment in reverse_links:
+            segments_which_must_be_on_contig_ends.extend(reverse_links[segment])
+    segments_which_must_be_on_contig_starts = []
+    for segment in dead_end_end_segments:
         if segment in links:
-            segmentsWhichMustBeOnContigStarts.extend(links[segment])
+            segments_which_must_be_on_contig_starts.extend(links[segment])
 
     # Remove any duplicates from the segments lists just made.
-    segmentsWhichMustBeOnContigStarts = list(set(segmentsWhichMustBeOnContigStarts))
-    segmentsWhichMustBeOnContigEnds = list(set(segmentsWhichMustBeOnContigEnds))
+    segments_which_must_be_on_contig_starts = list(set(segments_which_must_be_on_contig_starts))
+    segments_which_must_be_on_contig_ends = list(set(segments_which_must_be_on_contig_ends))
 
     # Before we split the contigs, we need to remember all of the links present
     # so they can be remade.
-    linksBeforeSplits = {}
+    links_before_splits = {}
     for contig in contigs:
-        start = contig.getNumberWithSign()
+        start = contig.get_number_with_sign()
         ends = []
-        for outgoingLinkedContig in contig.outgoingLinkedContigs:
-            ends.append(outgoingLinkedContig.getNumberWithSign())
-        linksBeforeSplits[start] = ends
+        for outgoing_linked_contig in contig.outgoing_linked_contigs:
+            ends.append(outgoing_linked_contig.get_number_with_sign())
+        links_before_splits[start] = ends
 
     # Now split contigs, as necessary.
-    newPositiveContigs = []
-    nextContigNumber = 1
-    oldNumbersToNewNumbers = {}
+    new_positive_contigs = []
+    next_contig_number = 1
+    old_nums_to_new_nums = {}
     for contig in contigs:
 
         # We only split positive contigs and will make the negative complement
         # after we are done.
-        if not contig.isPositive():
+        if not contig.is_positive():
             continue
 
         # We need to keep track of the mapping from old contig numbers to new
         # numbers, as this will be needed for reconnecting contigs.
-        contigNumber = contig.number
-        oldNumbersToNewNumbers[contigNumber] = []
+        contig_number = contig.number
+        old_nums_to_new_nums[contig_number] = []
 
         # This will contain the locations at which the contig must be split.
         # It is a list of integers which are indices for path segments that
         # must be at the start of the contig.
-        splitPoints = []
-        for segment in segmentsWhichMustBeOnContigStarts:
-            splitPoints.extend(contig.findSegmentLocations(segment))
-        for segment in segmentsWhichMustBeOnContigEnds:
-            splitPoints.extend(contig.findSegmentLocationsPlusOne(segment))
+        split_points = []
+        for segment in segments_which_must_be_on_contig_starts:
+            split_points.extend(contig.find_segment_locations(segment))
+        for segment in segments_which_must_be_on_contig_ends:
+            split_points.extend(contig.find_segment_locations_plus_one(segment))
 
         # Remove duplicates and sort split points.
-        splitPoints = sorted(list(set(splitPoints)))
+        split_points = sorted(list(set(split_points)))
 
         # If the first split point is zero, then remove it, as there is no need
         # to split a contig at its start.
-        if splitPoints and splitPoints[0] == 0:
-            splitPoints = splitPoints[1:]
+        if split_points and split_points[0] == 0:
+            split_points = split_points[1:]
 
         # If the last split point is one past the end, then remove it.
-        if splitPoints and splitPoints[-1] == contig.getSegmentCount():
-            splitPoints = splitPoints[:-1]
+        if split_points and split_points[-1] == contig.get_segment_count():
+            split_points = split_points[:-1]
 
         # If there are splits to be done, then we make the new contigs!
-        if splitPoints:
-            contig.determineAllSegmentLocations(segmentSequences, graph_overlap)
+        if split_points:
+            contig.determine_all_segment_locations(segment_sequences, graph_overlap)
 
-            for splitPoint in reversed(splitPoints):
-                contigPart1, contigPart2 = splitContig(contig, splitPoint, nextContigNumber)
+            for split_point in reversed(split_points):
+                contig_part_1, contig_part_2 = split_contig(contig, split_point, next_contig_number)
 
-                # If the split was successful, then both contigPart1 and
-                # contigPart2 are new Contig objects.  If unsuccessful, then
+                # If the split was successful, then both contig_part_1 and
+                # contig_part_2 are new Contig objects.  If unsuccessful, then
                 # they are None.
-                if contigPart1 is not None:
-                    newPositiveContigs.append(contigPart2)
-                    oldNumbersToNewNumbers[contigNumber] = [contigPart2.number] + oldNumbersToNewNumbers[contigNumber]
-                    contig = contigPart1
-                    nextContigNumber += 1
+                if contig_part_1 is not None:
+                    new_positive_contigs.append(contig_part_2)
+                    old_nums_to_new_nums[contig_number] = [contig_part_2.number] + old_nums_to_new_nums[contig_number]
+                    contig = contig_part_1
+                    next_contig_number += 1
 
-            newPositiveContigs.append(contig)
+            new_positive_contigs.append(contig)
 
         # If there weren't any split points, then we don't have to split the
         # contig.
         else:
-            newPositiveContigs.append(contig)
+            new_positive_contigs.append(contig)
 
         # At this point, the last contig added will have a number of 0, so we
         # need to renumber it.
-        newPositiveContigs[-1].renumber(nextContigNumber)
-        nextContigNumber += 1
-        oldNumbersToNewNumbers[contigNumber] = [newPositiveContigs[-1].number] + oldNumbersToNewNumbers[contigNumber]
+        new_positive_contigs[-1].renumber(next_contig_number)
+        next_contig_number += 1
+        old_nums_to_new_nums[contig_number] = [new_positive_contigs[-1].number] + old_nums_to_new_nums[contig_number]
 
     # Now we make the reverse complements for all of our new contigs.
-    newContigs = []
-    for contig in newPositiveContigs:
-        newContigs.append(contig)
-        newContigs.append(make_reverse_complement_contig(contig))
+    new_contigs = []
+    for contig in new_positive_contigs:
+        new_contigs.append(contig)
+        new_contigs.append(make_reverse_complement_contig(contig))
 
     # Now we have to put together the links in new contig numbers.  First we
     # Create the internal links between parts of a split contig.
-    linksAfterSplits = {}
-    for newNum in oldNumbersToNewNumbers.itervalues():
-        for i in range(len(newNum) - 1):
-            start = str(newNum[i]) + '+'
-            end = str(newNum[i+1]) + '+'
-            linksAfterSplits[start] = [end]
-            start = str(newNum[i+1]) + '-'
-            end = str(newNum[i]) + '-'
-            linksAfterSplits[start] = [end]
+    links_after_splits = {}
+    for new_num in old_nums_to_new_nums.itervalues():
+        for i in range(len(new_num) - 1):
+            start = str(new_num[i]) + '+'
+            end = str(new_num[i+1]) + '+'
+            links_after_splits[start] = [end]
+            start = str(new_num[i+1]) + '-'
+            end = str(new_num[i]) + '-'
+            links_after_splits[start] = [end]
 
     # Add the external links between contigs.  To do this we need to
     # translate old contig numbers to new contig numbers.
-    for start, ends in linksBeforeSplits.iteritems():
-        startSign = start[-1]
-        startNum = int(start[:-1])
-        if startSign == '+':
-            newStartNum = oldNumbersToNewNumbers[startNum][-1]
+    for start, ends in links_before_splits.iteritems():
+        start_sign = start[-1]
+        start_num = int(start[:-1])
+        if start_sign == '+':
+            new_start_num = old_nums_to_new_nums[start_num][-1]
         else:
-            newStartNum = oldNumbersToNewNumbers[startNum][0]
-        newStart = str(newStartNum) + startSign
-        newEnds = []
+            new_start_num = old_nums_to_new_nums[start_num][0]
+        new_start = str(new_start_num) + start_sign
+        new_ends = []
         for end in ends:
-            endSign = end[-1]
-            endNum = int(end[:-1])
-            if endSign == '+':
-                newEndNum = oldNumbersToNewNumbers[endNum][0]
+            end_sign = end[-1]
+            end_num = int(end[:-1])
+            if end_sign == '+':
+                new_end_num = old_nums_to_new_nums[end_num][0]
             else:
-                newEndNum = oldNumbersToNewNumbers[endNum][-1]
-            newEnd = str(newEndNum) + endSign
-            newEnds.append(newEnd)
-        linksAfterSplits[newStart] = newEnds
+                new_end_num = old_nums_to_new_nums[end_num][-1]
+            new_end = str(new_end_num) + end_sign
+            new_ends.append(new_end)
+        links_after_splits[new_start] = new_ends
 
     # Also make the links in reverse direction.
-    reverseLinksAfterSplits = {}
-    for start, ends in linksAfterSplits.iteritems():
+    reverse_links_after_splits = {}
+    for start, ends in links_after_splits.iteritems():
         for end in ends:
-            if end in reverseLinksAfterSplits:
-                reverseLinksAfterSplits[end].append(start)
+            if end in reverse_links_after_splits:
+                reverse_links_after_splits[end].append(start)
             else:
-                reverseLinksAfterSplits[end] = [start]
+                reverse_links_after_splits[end] = [start]
 
     # Now we add the links back to our new contigs.
-    newContigDict = {}
-    for contig in newContigs:
-        newContigDict[contig.getNumberWithSign()] = contig
-    for contig in newContigs:
-        contig.incomingLinkedContigs = []
-        contig.outgoingLinkedContigs = []
-        contigNum = contig.getNumberWithSign()
-        if contigNum in linksAfterSplits:
-            for outgoingNum in linksAfterSplits[contigNum]:
-                contig.outgoingLinkedContigs.append(newContigDict[outgoingNum])
-        if contigNum in reverseLinksAfterSplits:
-            for incomingNum in reverseLinksAfterSplits[contigNum]:
-                contig.incomingLinkedContigs.append(newContigDict[incomingNum])
+    new_contig_dict = {}
+    for contig in new_contigs:
+        new_contig_dict[contig.get_number_with_sign()] = contig
+    for contig in new_contigs:
+        contig.incoming_linked_contigs = []
+        contig.outgoing_linked_contigs = []
+        contig_num = contig.get_number_with_sign()
+        if contig_num in links_after_splits:
+            for outgoing_num in links_after_splits[contig_num]:
+                contig.outgoing_linked_contigs.append(new_contig_dict[outgoing_num])
+        if contig_num in reverse_links_after_splits:
+            for incoming_num in reverse_links_after_splits[contig_num]:
+                contig.incoming_linked_contigs.append(new_contig_dict[incoming_num])
 
-    return newContigs
+    return new_contigs
 
-
-
-# This function takes a contig and returns two contigs, split at the split
-# point.  The split point is an index for the segment for the segment in the
-# contig's path.
-def splitContig(contig, splitPoint, nextContigNumber):
-
+def split_contig(contig, split_point, next_contig_number):
+    """
+    This function takes a contig and returns two contigs, split at the split
+    point.  The split point is an index for the segment for the segment in the
+    contig's path.
+    """
     # Determine the new contig paths.
-    newContig1Path = Path(contig.path.segmentList[:splitPoint])
-    newContig2Path = Path(contig.path.segmentList[splitPoint:])
+    new_contig_1_path = Path(contig.path.segment_list[:split_point])
+    new_contig_2_path = Path(contig.path.segment_list[split_point:])
 
     # Get the coordinates for the new contig paths.
-    newContig1PathContigCoordinates = contig.path.contigCoordinates[:splitPoint]
-    newContig2PathContigCoordinates = contig.path.contigCoordinates[splitPoint:]
-    newContig1FirstSegmentCoordinates = newContig1PathContigCoordinates[0]
-    newContig1LastSegmentCoordinates = newContig1PathContigCoordinates[-1]
-    newContig2FirstSegmentCoordinates = newContig2PathContigCoordinates[0]
-    newContig2LastSegmentCoordinates = newContig2PathContigCoordinates[-1]
+    new_contig_1_path_coordinates = contig.path.contig_coordinates[:split_point]
+    new_contig_2_path_coordinates = contig.path.contig_coordinates[split_point:]
+    new_contig_1_first_segment_coordinates = new_contig_1_path_coordinates[0]
+    new_contig_1_last_segment_coordinates = new_contig_1_path_coordinates[-1]
+    new_contig_2_first_segment_coordinates = new_contig_2_path_coordinates[0]
+    new_contig_2_last_segment_coordinates = new_contig_2_path_coordinates[-1]
 
     # Check to see if any of the important coordinates are absent, as will be
     # the case if this program was unable to find the segment in the contig.
     # In this case, the split fails.
-    if newContig1FirstSegmentCoordinates[0] is None or \
-       newContig1LastSegmentCoordinates[1] is None or \
-       newContig2FirstSegmentCoordinates[0] is None or \
-       newContig2LastSegmentCoordinates[1] is None:
+    if new_contig_1_first_segment_coordinates[0] is None or \
+       new_contig_1_last_segment_coordinates[1] is None or \
+       new_contig_2_first_segment_coordinates[0] is None or \
+       new_contig_2_last_segment_coordinates[1] is None:
         return None, None
 
     # Determine exact coordinate for the new segments.
-    # The indices are bit confusing here, as the contigCoordinates are 1-based
+    # The indices are bit confusing here, as the contig coordinates are 1-based
     # with an inclusive end (because that's how BLAST does it).  To get to
     # 0-based and exclusive end (for Python), we subtract one from the start.
-    newContig1SeqStart = newContig1FirstSegmentCoordinates[0] - 1
-    newContig1SeqEnd = newContig1LastSegmentCoordinates[1]
-    newContig1Sequence = contig.sequence[newContig1SeqStart:newContig1SeqEnd]
-    newContig2SeqStart = newContig2FirstSegmentCoordinates[0] - 1
-    newContig2SeqEnd = newContig2LastSegmentCoordinates[1]
-    newContig2Sequence = contig.sequence[newContig2SeqStart:newContig2SeqEnd]
+    new_contig_1_seq_start = new_contig_1_first_segment_coordinates[0] - 1
+    new_contig_1_seq_end = new_contig_1_last_segment_coordinates[1]
+    new_contig_1_sequence = contig.sequence[new_contig_1_seq_start:new_contig_1_seq_end]
+    new_contig_2_seq_start = new_contig_2_first_segment_coordinates[0] - 1
+    new_contig_2_seq_end = new_contig_2_last_segment_coordinates[1]
+    new_contig_2_sequence = contig.sequence[new_contig_2_seq_start:new_contig_2_seq_end]
 
     # Give the next contig number to the second piece, as the first one may
     # have to be split further.  It will be renumbered, if necessary, later.
-    newContig1Name = 'NODE_0_length_' + str(len(newContig1Sequence)) + '_cov_' + str(contig.cov)
-    newContig2Name = 'NODE_' + str(nextContigNumber) + '_length_' + str(len(newContig2Sequence)) + '_cov_' + str(contig.cov)
+    new_contig_1_name = 'NODE_0_length_' + str(len(new_contig_1_sequence)) + '_cov_' + str(contig.cov)
+    new_contig_2_name = 'NODE_' + str(next_contig_number) + '_length_' + str(len(new_contig_2_sequence)) + '_cov_' + str(contig.cov)
 
     # The first contig is the one that will potentially be split again, so it
     # still needs to have contig coordinates in its path.
-    newContig1 = Contig(newContig1Name, newContig1Sequence)
-    newContig1.addPath(newContig1Path)
-    newContig1.path.contigCoordinates = newContig1PathContigCoordinates
+    new_contig_1 = Contig(new_contig_1_name, new_contig_1_sequence)
+    new_contig_1.add_path(new_contig_1_path)
+    new_contig_1.path.contig_coordinates = new_contig_1_path_coordinates
 
-    newContig2 = Contig(newContig2Name, newContig2Sequence)
-    newContig2.addPath(newContig2Path)
+    new_contig_2 = Contig(new_contig_2_name, new_contig_2_sequence)
+    new_contig_2.add_path(new_contig_2_path)
 
-    return newContig1, newContig2
+    return new_contig_1, new_contig_2
 
+def does_overlap_work(s_1, s_2, overlap):
+    """
+    Test a single overlap between two sequences.
+    """
+    return s_1[-overlap:] == s_2[:overlap]
 
+def get_possible_overlaps(s_1, s_2, possible_overlaps):
+    """
+    Try the possible overlaps in the given list and return those that work.
+    """
+    new_possible_overlaps = []
+    for possible_overlap in possible_overlaps:
+        if does_overlap_work(s_1, s_2, possible_overlap):
+            new_possible_overlaps.append(possible_overlap)
+    return new_possible_overlaps
 
-# This function tests a single overlap between two sequences.
-def doesOverlapWork(s1, s2, overlap):
-    endOfS1 = s1[-overlap:]
-    startOfS2 = s2[:overlap]
-    return endOfS1 == startOfS2
-
-
-# This function tries the possibleOverlaps in the given list and returns
-# those that work.
-def getPossibleOverlaps(s1, s2, possibleOverlaps):
-
-    newPossibleOverlaps = []
-
-    for possibleOverlap in possibleOverlaps:
-        if doesOverlapWork(s1, s2, possibleOverlap):
-            newPossibleOverlaps.append(possibleOverlap)
-
-    return newPossibleOverlaps
-
-
-# This function figures out what the graph overlap size is.
-def get_graph_overlap(links, segmentSequences):
-
-    if len(links) == 0:
+def get_graph_overlap(links, segment_sequences):
+    """
+    Figure out the graph overlap size.
+    """
+    if not links:
         return 0
 
     # Determine the shortest segment in the graph, as this will be the maximum
     # possible overlap.
-    segmentLengths = []
-    for sequence in segmentSequences.itervalues():
-        segmentLengths.append(len(sequence))
-    shortestSegmentSequence = min(segmentLengths)
+    segment_lengths = []
+    for sequence in segment_sequences.itervalues():
+        segment_lengths.append(len(sequence))
+    shortest_segment_sequence = min(segment_lengths)
 
     # Now we loop through each overlap looking at the segment pairs.
-    possibleOverlaps = range(1, shortestSegmentSequence + 1)
+    possible_overlaps = range(1, shortest_segment_sequence + 1)
     for start, ends in links.iteritems():
         if start.startswith('gap'):
             continue
-        s1 = segmentSequences[start]
-        for endingSegment in ends:
-            if endingSegment.startswith('gap'):
+        s_1 = segment_sequences[start]
+        for ending_segment in ends:
+            if ending_segment.startswith('gap'):
                 continue
-            s2 = segmentSequences[endingSegment]
-            possibleOverlaps = getPossibleOverlaps(s1, s2, possibleOverlaps)
+            s_2 = segment_sequences[ending_segment]
+            possible_overlaps = get_possible_overlaps(s_1, s_2, possible_overlaps)
 
             # If no overlaps work, then we return 0.
             # This shouldn't happen, as every SPAdes graph should have overlaps.
-            if len(possibleOverlaps) == 0:
+            if len(possible_overlaps) == 0:
                 return 0
 
             # If only one overlap works, then that's our answer!
-            if len(possibleOverlaps) == 1:
-                return possibleOverlaps[0]
+            if len(possible_overlaps) == 1:
+                return possible_overlaps[0]
 
     # If the code gets here, that means we have tried every segment pair and
     # there are still multiple possible overlaps.  This shouldn't happen in
@@ -848,249 +818,201 @@ def get_graph_overlap(links, segmentSequences):
     print('Error: failed to correctly determine graph overlap', file=sys.stderr)
     return 0
 
-
-
-def saveSequenceToFastaFile(sequence, sequenceName, filename):
-    fastaFile = open(filename, 'w')
-    fastaFile.write('>' + sequenceName)
-    fastaFile.write('\n')
-    fastaFile.write(sequence)
-    fastaFile.write('\n')
-
-# This function looks through all contigs to see if the link is present in
-# their paths.
-def linkIsInContigs(start, end, contigs):
-    for contig in contigs:
-        if contig.path.containsLink(start, end):
-            return True
-    return False
-
-# This function looks through all pairs of contigs to see if the link exists
-# between their ends.
-def linkIsBetweenContigs(start, end, contigs):
-    for contig1 in contigs:
-        for contig2 in contig1.outgoingLinkedContigs:
-            if contig1.getEndingSegment() == start and contig2.getStartingSegment() == end:
-                return True
-    return False
-
+def save_sequence_to_fasta_file(sequence, sequence_name, filename):
+    fasta_file = open(filename, 'w')
+    fasta_file.write('>' + sequence_name)
+    fasta_file.write('\n')
+    fasta_file.write(sequence)
+    fasta_file.write('\n')
 
 def merge_contigs(contigs, graph_overlap):
     print('Merging contigs....... ', end='')
     sys.stdout.flush()
-    contigs = mergeIdenticalContigs(contigs)
-    contigs = mergeLinearRuns(contigs, graph_overlap)
+    contigs = merge_identical_contigs(contigs)
+    contigs = merge_linear_runs(contigs, graph_overlap)
     print('done')
     return contigs
 
-
-
-# This function looks for contigs which are made of the exact same graph
-# segments as each other.
-def mergeIdenticalContigs(contigs):
-
-    contigGroups = []
+def merge_identical_contigs(contigs):
+    """
+    Find contigs which are made of the exact same graph segments as each other
+    and merge them.
+    """
+    contig_groups = []
 
     # Group contigs into collections with the exact same segment list.
     for contig in contigs:
-        for contigGroup in contigGroups:
-            if contig.path.segmentList == contigGroup[0].path.segmentList:
-                contigGroup.append(contig)
+        for contig_group in contig_groups:
+            if contig.path.segment_list == contig_group[0].path.segment_list:
+                contig_group.append(contig)
                 break
         else:
-            contigGroups.append([contig])
+            contig_groups.append([contig])
 
     # For the first contig in each group, give it the linked contigs of its
     # entire group.
-    oldNumberToNewContig = {}
-    newContigs = []
-    for contigGroup in contigGroups:
-        allIncomingLinkedContigNumbers = set()
-        allOutgoingLinkedContigNumbers = set()
-        firstContigInGroup = contigGroup[0]
-        for contig in contigGroup:
-            for incomingLinkedContig in contig.incomingLinkedContigs:
-                allIncomingLinkedContigNumbers.add(incomingLinkedContig.getNumberWithSign())
-            for outgoingLinkedContig in contig.outgoingLinkedContigs:
-                allOutgoingLinkedContigNumbers.add(outgoingLinkedContig.getNumberWithSign())
-            oldNumberToNewContig[contig.getNumberWithSign()] = firstContigInGroup
-        firstContigInGroup.incomingLinkedContigs = list(allIncomingLinkedContigNumbers)
-        firstContigInGroup.outgoingLinkedContigs = list(allOutgoingLinkedContigNumbers)
-        newContigs.append(firstContigInGroup)
+    old_num_to_new_contig = {}
+    new_contigs = []
+    for contig_group in contig_groups:
+        all_incoming_linked_contig_numbers = set()
+        all_outgoing_linked_contig_numbers = set()
+        first_contig_in_group = contig_group[0]
+        for contig in contig_group:
+            for incoming_linked_contig in contig.incoming_linked_contigs:
+                all_incoming_linked_contig_numbers.add(incoming_linked_contig.get_number_with_sign())
+            for outgoing_linked_contig in contig.outgoing_linked_contigs:
+                all_outgoing_linked_contig_numbers.add(outgoing_linked_contig.get_number_with_sign())
+            old_num_to_new_contig[contig.get_number_with_sign()] = first_contig_in_group
+        first_contig_in_group.incoming_linked_contigs = list(all_incoming_linked_contig_numbers)
+        first_contig_in_group.outgoing_linked_contigs = list(all_outgoing_linked_contig_numbers)
+        new_contigs.append(first_contig_in_group)
 
     # Now for each of the new contigs, we must convert the linked contig lists
     # from numbers to actual contigs.
-    for contig in newContigs:
-        newIncomingLinkedContigs = set()
-        newOutgoingLinkedContigs = set()
-        for incomingLinkedContigOldNumber in contig.incomingLinkedContigs:
-            newIncomingLinkedContigs.add(oldNumberToNewContig[incomingLinkedContigOldNumber])
-        for outgoingLinkedContigOldNumber in contig.outgoingLinkedContigs:
-            newOutgoingLinkedContigs.add(oldNumberToNewContig[outgoingLinkedContigOldNumber])
-        contig.incomingLinkedContigs = list(newIncomingLinkedContigs)
-        contig.outgoingLinkedContigs = list(newOutgoingLinkedContigs)
+    for contig in new_contigs:
+        new_incoming_linked_contigs = set()
+        new_outgoing_linked_contigs = set()
+        for incoming_linked_contig_old_number in contig.incoming_linked_contigs:
+            new_incoming_linked_contigs.add(old_num_to_new_contig[incoming_linked_contig_old_number])
+        for outgoing_linked_contig_old_number in contig.outgoing_linked_contigs:
+            new_outgoing_linked_contigs.add(old_num_to_new_contig[outgoing_linked_contig_old_number])
+        contig.incoming_linked_contigs = list(new_incoming_linked_contigs)
+        contig.outgoing_linked_contigs = list(new_outgoing_linked_contigs)
 
-    return newContigs
+    return new_contigs
 
+def merge_linear_runs(contigs, graph_overlap):
+    """
+    Find and merge simple linear runs of contigs.
+    """
+    merge_happened = True
+    while merge_happened:
 
-# This function simplifies the graph by merging simple linear runs together.
-def mergeLinearRuns(contigs, graph_overlap):
-
-    mergeHappened = True
-    while mergeHappened:
-
-        contigDict = {}
+        contig_dict = {}
         for contig in contigs:
-            contigDict[contig.getNumberWithSign()] = contig
+            contig_dict[contig.get_number_with_sign()] = contig
 
         for contig in contigs:
 
             # Make sure that this contig has one downstream contig and that
             # only has one upstream contig.
-            if len(contig.outgoingLinkedContigs) != 1:
+            if len(contig.outgoing_linked_contigs) != 1:
                 continue
-            nextContig = contig.outgoingLinkedContigs[0]
-            if len(nextContig.incomingLinkedContigs) != 1 or \
-               nextContig.incomingLinkedContigs[0] != contig:
+            next_contig = contig.outgoing_linked_contigs[0]
+            if len(next_contig.incoming_linked_contigs) != 1 or \
+               next_contig.incoming_linked_contigs[0] != contig:
                 continue
 
             # Make sure this contig isn't just looping back to itself.
-            if contig == nextContig:
+            if contig == next_contig:
                 continue
 
             # Make sure that the reverse complement contigs are also properly
             # simple and linear.
-            revCompContig = contigDict[get_opposite_sequence_number(contig.getNumberWithSign())]
-            revCompNextContig = contigDict[get_opposite_sequence_number(nextContig.getNumberWithSign())]
-            if len(revCompNextContig.outgoingLinkedContigs) != 1 or \
-               len(revCompContig.incomingLinkedContigs) != 1 or \
-               revCompNextContig.outgoingLinkedContigs[0] != revCompContig or \
-               revCompContig.incomingLinkedContigs[0] != revCompNextContig:
+            rev_comp_contig = contig_dict[get_opposite_sequence_number(contig.get_number_with_sign())]
+            rev_comp_next_contig = contig_dict[get_opposite_sequence_number(next_contig.get_number_with_sign())]
+            if len(rev_comp_next_contig.outgoing_linked_contigs) != 1 or \
+               len(rev_comp_contig.incoming_linked_contigs) != 1 or \
+               rev_comp_next_contig.outgoing_linked_contigs[0] != rev_comp_contig or \
+               rev_comp_contig.incoming_linked_contigs[0] != rev_comp_next_contig:
                 continue
 
             # Make sure that the contig is not simply looping back onto its own
             # reverse complement.
-            if nextContig == revCompContig or contig == revCompNextContig:
+            if next_contig == rev_comp_contig or contig == rev_comp_next_contig:
                 continue
 
-            # If the code got here, then we can merge contig and nextContig
+            # If the code got here, then we can merge contig and next_contig
             # (and their reverse complements).
-            contigs = mergeTwoContigs(contigs, graph_overlap, contig, nextContig, revCompContig, revCompNextContig)
+            contigs = merge_two_contigs(contigs, graph_overlap, contig, next_contig, rev_comp_contig, rev_comp_next_contig)
             break
 
         else:
-            mergeHappened = False
+            merge_happened = False
 
     return contigs
 
+def merge_two_contigs(all_contigs, graph_overlap, contig_1, contig_2, contig_1_rev_comp, contig_2_rev_comp):
+    largest_contig_number = 0
+    for contig in all_contigs:
+        contig_num = contig.number
+        if contig_num > largest_contig_number:
+            largest_contig_number = contig_num
+    merged_contig_num = largest_contig_number + 1
 
+    merged_contig_sequence = contig_1.sequence[:-graph_overlap] + contig_2.sequence
+    merged_contig_sequence_rev_comp = contig_2_rev_comp.sequence + contig_1_rev_comp.sequence[graph_overlap:]
 
-def mergeTwoContigs(allContigs, graph_overlap, contig1, contig2, contig1RevComp, contig2RevComp):
+    merged_contig_name = "NODE_" + str(merged_contig_num) + "_length_" + str(len(merged_contig_sequence)) + "_cov_1.0"
+    merged_contig_name_rev_comp = "NODE_" + str(merged_contig_num) + "_length_" + str(len(merged_contig_sequence_rev_comp)) + "_cov_1.0'"
 
-    largestContigNumber = 0
-    for contig in allContigs:
-        contigNum = contig.number
-        if contigNum > largestContigNumber:
-            largestContigNumber = contigNum
-    mergedContigNum = largestContigNumber + 1
-
-    mergedContigSequence = contig1.sequence[:-graph_overlap] + contig2.sequence
-    mergedContigSequenceRevComp = contig2RevComp.sequence + contig1RevComp.sequence[graph_overlap:]
-
-    mergedContigName = "NODE_" + str(mergedContigNum) + "_length_" + str(len(mergedContigSequence)) + "_cov_1.0"
-    mergedContigNameRevComp = "NODE_" + str(mergedContigNum) + "_length_" + str(len(mergedContigSequenceRevComp)) + "_cov_1.0'"
-
-    mergedContig = Contig(mergedContigName, mergedContigSequence)
-    mergedContigRevComp = Contig(mergedContigNameRevComp, mergedContigSequenceRevComp)
+    merged_contig = Contig(merged_contig_name, merged_contig_sequence)
+    merged_contig_rev_comp = Contig(merged_contig_name_rev_comp, merged_contig_sequence_rev_comp)
 
     # Copy the connections over to the new merged contigs.
-    mergedContig.incomingLinkedContigs = contig1.incomingLinkedContigs
-    mergedContig.outgoingLinkedContigs = contig2.outgoingLinkedContigs
-    mergedContigRevComp.incomingLinkedContigs = contig2RevComp.incomingLinkedContigs
-    mergedContigRevComp.outgoingLinkedContigs = contig1RevComp.outgoingLinkedContigs
+    merged_contig.incoming_linked_contigs = contig_1.incoming_linked_contigs
+    merged_contig.outgoing_linked_contigs = contig_2.outgoing_linked_contigs
+    merged_contig_rev_comp.incoming_linked_contigs = contig_2_rev_comp.incoming_linked_contigs
+    merged_contig_rev_comp.outgoing_linked_contigs = contig_1_rev_comp.outgoing_linked_contigs
 
     # Copy the path segments over to the new merged contigs.
-    mergedContig.path.segmentList = contig1.path.segmentList + contig2.path.segmentList
-    mergedContigRevComp.path.segmentList = contig2RevComp.path.segmentList + contig1RevComp.path.segmentList
+    merged_contig.path.segment_list = contig_1.path.segment_list + contig_2.path.segment_list
+    merged_contig_rev_comp.path.segment_list = contig_2_rev_comp.path.segment_list + contig_1_rev_comp.path.segment_list
 
     # Build a new list of contigs, and while we're looping through, we can fix
     # up any links to the merged contig.
-    newContigs = []
-    for contig in allContigs:
-        if contig == contig1 or contig == contig2 or contig == contig1RevComp or contig == contig2RevComp:
+    new_contigs = []
+    for contig in all_contigs:
+        if contig == contig_1 or contig == contig_2 or contig == contig_1_rev_comp or contig == contig_2_rev_comp:
             continue
 
-        newIncomingLinkedContigs = []
-        for incomingLinkedContig in contig.incomingLinkedContigs:
-            if incomingLinkedContig == contig2:
-                newIncomingLinkedContigs.append(mergedContig)
-            elif incomingLinkedContig == contig1RevComp:
-                newIncomingLinkedContigs.append(mergedContigRevComp)
+        new_incoming_linked_contigs = []
+        for incoming_linked_contig in contig.incoming_linked_contigs:
+            if incoming_linked_contig == contig_2:
+                new_incoming_linked_contigs.append(merged_contig)
+            elif incoming_linked_contig == contig_1_rev_comp:
+                new_incoming_linked_contigs.append(merged_contig_rev_comp)
             else:
-                newIncomingLinkedContigs.append(incomingLinkedContig)
-        contig.incomingLinkedContigs = newIncomingLinkedContigs
+                new_incoming_linked_contigs.append(incoming_linked_contig)
+        contig.incoming_linked_contigs = new_incoming_linked_contigs
 
-        newOutgoingLinkedContigs = []
-        for outgoingLinkedContig in contig.outgoingLinkedContigs:
-            if outgoingLinkedContig == contig1:
-                newOutgoingLinkedContigs.append(mergedContig)
-            elif outgoingLinkedContig == contig2RevComp:
-                newOutgoingLinkedContigs.append(mergedContigRevComp)
+        new_outgoing_linked_contigs = []
+        for outgoing_linked_contig in contig.outgoing_linked_contigs:
+            if outgoing_linked_contig == contig_1:
+                new_outgoing_linked_contigs.append(merged_contig)
+            elif outgoing_linked_contig == contig_2_rev_comp:
+                new_outgoing_linked_contigs.append(merged_contig_rev_comp)
             else:
-                newOutgoingLinkedContigs.append(outgoingLinkedContig)
-        contig.outgoingLinkedContigs = newOutgoingLinkedContigs
+                new_outgoing_linked_contigs.append(outgoing_linked_contig)
+        contig.outgoing_linked_contigs = new_outgoing_linked_contigs
 
-        newContigs.append(contig)
+        new_contigs.append(contig)
 
-    newContigs.append(mergedContig)
-    newContigs.append(mergedContigRevComp)
+    new_contigs.append(merged_contig)
+    new_contigs.append(merged_contig_rev_comp)
 
-    return newContigs
-
-
-
-# This function is run after removeDuplicateContigs.  It goes through all of
-# the contigs' links and removes ones that are no longer valid (because their
-# destination contig has been removed as a duplicate).
-def removeBogusLinks(contigs):
-
-    contigNumSet = set()
-    for contig in contigs:
-        contigNumSet.add(contig.number)
-
-    for contig in contigs:
-        newIncomingLinkedContigs = []
-        newOutgoingLinkedContigs = []
-
-        for incomingLinkedContig in contig.incomingLinkedContigs:
-            if incomingLinkedContig.number in contigNumSet:
-                newIncomingLinkedContigs.append(incomingLinkedContig)
-        for outgoingLinkedContig in contig.outgoingLinkedContigs:
-            if outgoingLinkedContig.number in contigNumSet:
-                newOutgoingLinkedContigs.append(outgoingLinkedContig)
-
-        contig.incomingLinkedContigs = newIncomingLinkedContigs
-        contig.outgoingLinkedContigs = newOutgoingLinkedContigs
+    return new_contigs
 
 
-
-# This function recalculates contig depths using the depths of the graph
-# segments which make up the contigs.
-# For this function I tried to copy what SPAdes does: it seems to define a
-# contig's depth as the weighted average of the graph segments in the contig.
-# The weight for the average is the segment length minus the overlap.
-# Notably, SPAdes does not seem to divide up the available depth for a segment
-# which appears in multiple places in the contigs, so I don't do that either.
 def recalculate_contig_depths(contigs, sequences, depths, graph_overlap):
-
+    """
+    This function recalculates contig depths using the depths of the graph
+    segments which make up the contigs.
+    For this function I tried to copy what SPAdes does: it seems to define a
+    contig's depth as the weighted average of the graph segments in the contig.
+    The weight for the average is the segment length minus the overlap.
+    Notably, SPAdes does not seem to divide up the available depth for a
+    segment which appears in multiple places in the contigs, so I don't do that
+    either.
+    """
     print('Calculating depth..... ', end='')
     sys.stdout.flush()
 
     for contig in contigs:
-        totalLength = 0
-        totalDepthTimesLength = 0.0
+        total_length = 0
+        total_depth_times_length = 0.0
 
-        for segment in contig.path.segmentList:
+        for segment in contig.path.segment_list:
             if segment.startswith('gap'):
                 continue
 
@@ -1101,73 +1023,67 @@ def recalculate_contig_depths(contigs, sequences, depths, graph_overlap):
                 depth = depths[segment]
             else:
                 depth = depths[get_opposite_sequence_number(segment)]
-            adjustedDepth = depth
+            adjusted_depth = depth
 
             if segment in sequences:
                 length = len(sequences[segment])
             else:
                 length = len(sequences[get_opposite_sequence_number(segment)])
-            adjustedLength = length - graph_overlap
+            adjusted_length = length - graph_overlap
 
-            totalLength += adjustedLength
-            totalDepthTimesLength += adjustedDepth * adjustedLength
+            total_length += adjusted_length
+            total_depth_times_length += adjusted_depth * adjusted_length
 
-        if totalLength > 0:
-            finalDepth = totalDepthTimesLength / totalLength
-            contig.cov = finalDepth
-            contig.rebuildFullName()
+        if total_length > 0:
+            final_depth = total_depth_times_length / total_length
+            contig.cov = final_depth
+            contig.rebuild_full_name()
 
     print('done')
 
-
-
-
 def renumber_contigs(contigs):
-
     print('Renumbering contigs... ', end='')
     sys.stdout.flush()
 
     # Sort from contigs big to small, so contig 1 is the largest.
-    positiveContigs = []
+    positive_contigs = []
     for contig in contigs:
-        if contig.isPositive():
-            positiveContigs.append(contig)
-    sortedContigs = sorted(positiveContigs, key=lambda contig: len(contig.sequence), reverse=True)
+        if contig.is_positive():
+            positive_contigs.append(contig)
+    sorted_contigs = sorted(positive_contigs, key=lambda contig: len(contig.sequence), reverse=True)
 
     # Create the new number mapping.
-    oldNumToNewNum = {}
+    old_nums_to_new_nums = {}
     i = 1
-    for contig in sortedContigs:
-        oldNumToNewNum[contig.number] = i
+    for contig in sorted_contigs:
+        old_nums_to_new_nums[contig.number] = i
         i += 1
 
-    # Assign new numbers and create complement contigs.
+    # Assign new numbers and sort using them.
     for contig in contigs:
-        contig.renumber(oldNumToNewNum[contig.number])
-
-    # Sort the contigs using their new numbers.
-    contigs.sort(key=lambda contig: (contig.number, contig.getSign()))
+        contig.renumber(old_nums_to_new_nums[contig.number])
+    contigs.sort(key=lambda contig: (contig.number, contig.get_sign()))
 
     print('done')
 
-
-# This function takes blast alignments and returns the best one.
-# 'Best' is defined first as covering the entirety of the alignment, being high
-# identity and having an appropriate start position.
-def getBestBlastAlignment(blastAlignments, segmentLength, expectedReferenceStart):
-
-    if not blastAlignments:
+def get_best_blast_alignment(blast_alignments, segment_length, expected_reference_start):
+    """
+    Find and return the best of the given BLAST alignments.  'Best' is defined
+    as covering the entirety of the alignment, being high identity and having
+    an appropriate start position.
+    """
+    if not blast_alignments:
         return None
 
     # Sort by alignment length and identity.
-    sortedAlignments = sorted(blastAlignments, key=lambda alignment: (alignment.getQueryLength(), alignment.percentIdentity), reverse=True)
+    sorted_alignments = sorted(blast_alignments, key=lambda alignment: (alignment.get_query_length(), alignment.percent_identity), reverse=True)
 
     # If we have an expected reference start to work with, then we find the
     # first alignment in the list which occurs very near the expected reference
     # start.
-    if expectedReferenceStart is not None:
-        for alignment in sortedAlignments:
-            discrepancy = abs(alignment.getQueryStartInReference() - expectedReferenceStart)
+    if expected_reference_start is not None:
+        for alignment in sorted_alignments:
+            discrepancy = abs(alignment.get_query_start_in_reference() - expected_reference_start)
             if discrepancy < 5:
                 return alignment
 
@@ -1175,26 +1091,16 @@ def getBestBlastAlignment(blastAlignments, segmentLength, expectedReferenceStart
     # more limited.  We can only give a result if there is a single full length
     # alignment.
     else:
-        fullLengthAlignments = []
-        for alignment in sortedAlignments:
-            fractionPresent = alignment.getQueryLength() / segmentLength
-            if fractionPresent == 1.0:
-                fullLengthAlignments.append(alignment)
-        if len(fullLengthAlignments) == 1:
-            return fullLengthAlignments[0]
+        full_length_alignments = []
+        for alignment in sorted_alignments:
+            fraction_present = alignment.get_query_length() / segment_length
+            if fraction_present == 1.0:
+                full_length_alignments.append(alignment)
+        if len(full_length_alignments) == 1:
+            return full_length_alignments[0]
 
     # If the code got here, then no good match was found.
     return None
-
-
-
-
-
-
-
-
-
-
 
 
 # This class holds a contig: its name, sequence and length.
@@ -1202,15 +1108,15 @@ class Contig:
 
     def __init__(self, name, sequence):
         self.fullname = name
-        nameParts = name.split('_')
-        self.number = int(nameParts[1])
-        covString = nameParts[5]
-        if covString[-1] == "'":
-            covString = covString[:-1]
-        self.cov = float(covString)
+        name_parts = name.split('_')
+        self.number = int(name_parts[1])
+        cov_string = name_parts[5]
+        if cov_string[-1] == "'":
+            cov_string = cov_string[:-1]
+        self.cov = float(cov_string)
         self.sequence = sequence
-        self.outgoingLinkedContigs = []
-        self.incomingLinkedContigs = []
+        self.outgoing_linked_contigs = []
+        self.incoming_linked_contigs = []
         self.path = Path()
 
     def __str__(self):
@@ -1219,90 +1125,99 @@ class Contig:
     def __repr__(self):
         return self.fullname
 
-    def renumber(self, newNumber):
-        self.number = newNumber
-        self.rebuildFullName()
+    def renumber(self, new_number):
+        self.number = new_number
+        self.rebuild_full_name()
 
-    def rebuildFullName(self):
-        positive = self.isPositive()
+    def rebuild_full_name(self):
+        """
+        Remake the contig's full name using its current number, sequence and
+        depth.
+        """
+        positive = self.is_positive()
         self.fullname = 'NODE_' + str(self.number) + '_length_' + str(len(self.sequence)) + '_cov_' + str(self.cov)
         if not positive:
             self.fullname += "'"
 
-    def getNumberWithSign(self):
+    def get_number_with_sign(self):
+        """
+        Return the contig number in string form with a + or - at the end.
+        """
         num = str(self.number)
-        if self.isPositive():
+        if self.is_positive():
             num += '+'
         else:
             num += '-'
         return num
 
-    def getSign(self):
-        if self.isPositive():
+    def get_sign(self):
+        if self.is_positive():
             return '+'
         else:
             return '-'
 
-    def addPath(self, path):
+    def add_path(self, path):
         self.path = path
 
-    def getStartingSegment(self):
-        return self.path.getFirstSegment()
+    def get_starting_segment(self):
+        return self.path.get_first_segment()
 
-    def getEndingSegment(self):
-        return self.path.getLastSegment()
+    def get_ending_segment(self):
+        return self.path.get_last_segment()
 
-    def isPositive(self):
+    def is_positive(self):
         return self.fullname[-1] != "'"
 
-    # This function produces a FASTG header for the contig, with links and a
-    # line break at the end.
-    def getHeaderWithLinks(self):
-        headerWithEdges = '>' + self.fullname
+    def get_header_with_links(self):
+        """
+        Produce a FASTG header for the contig, with links and a line break at
+        the end.
+        """
+        header_with_edges = '>' + self.fullname
 
-        if len(self.outgoingLinkedContigs) > 0:
-            headerWithEdges += ':'
-            for linkedContig in self.outgoingLinkedContigs:
-                headerWithEdges += linkedContig.fullname + ','
-            headerWithEdges = headerWithEdges[0:-1]
+        if len(self.outgoing_linked_contigs) > 0:
+            header_with_edges += ':'
+            for linked_contig in self.outgoing_linked_contigs:
+                header_with_edges += linked_contig.fullname + ','
+            header_with_edges = header_with_edges[0:-1]
 
-        headerWithEdges += ';\n'
-        return headerWithEdges
+        header_with_edges += ';\n'
+        return header_with_edges
 
-    def getSequenceWithLineBreaks(self):
-        sequenceRemaining = self.sequence
-        returnSequence = ''
-        while len(sequenceRemaining) > 60:
-            returnSequence += sequenceRemaining[0:60] + '\n'
-            sequenceRemaining = sequenceRemaining[60:]
-        returnSequence += sequenceRemaining + '\n'
-        return returnSequence
+    def get_sequence_with_line_breaks(self):
+        sequence_remaining = self.sequence
+        sequence_with_line_breaks = ''
+        while len(sequence_remaining) > 60:
+            sequence_with_line_breaks += sequence_remaining[0:60] + '\n'
+            sequence_remaining = sequence_remaining[60:]
+        sequence_with_line_breaks += sequence_remaining + '\n'
+        return sequence_with_line_breaks
 
-    def getSegmentCount(self):
-        return self.path.getSegmentCount()
+    def get_segment_count(self):
+        return self.path.get_segment_count()
 
-    def findSegmentLocations(self, s):
-        return self.path.findSegmentLocations(s)
+    def find_segment_locations(self, segment):
+        return self.path.find_segment_locations(segment)
 
-    def findSegmentLocationsPlusOne(self, s):
-        segmentLocations = self.path.findSegmentLocations(s)
-        return [x+1 for x in segmentLocations]
+    def find_segment_locations_plus_one(self, segment):
+        segment_locations = self.path.find_segment_locations(segment)
+        return [x+1 for x in segment_locations]
 
-    # This function determines the start and end coordinates of each of the
-    # contig's segments, in contig sequence coordinates.  This information is
-    # necessary before we can split a contig.
-    def determineAllSegmentLocations(self, segmentSequences, graph_overlap):
-
+    def determine_all_segment_locations(self, segment_sequences, graph_overlap):
+        """
+        Determine the start and end coordinates of each segment in the contig.
+        This information is necessary before the contig can be split.
+        """
         # Create a temporary directory for doing BLAST searches.
         if not os.path.exists('GetSPAdesContigGraph-temp'):
             os.makedirs('GetSPAdesContigGraph-temp')
 
-        saveSequenceToFastaFile(self.sequence, self.fullname, 'GetSPAdesContigGraph-temp/contig.fasta')
+        save_sequence_to_fasta_file(self.sequence, self.fullname, 'GetSPAdesContigGraph-temp/contig.fasta')
 
         # Create a BLAST database for the contig.
-        makeblastdbCommand = ['makeblastdb', '-dbtype', 'nucl', '-in', 'GetSPAdesContigGraph-temp/contig.fasta']
-        p = subprocess.Popen(makeblastdbCommand, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = p.communicate()
+        makeblastdb_command = ['makeblastdb', '-dbtype', 'nucl', '-in', 'GetSPAdesContigGraph-temp/contig.fasta']
+        process = subprocess.Popen(makeblastdb_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = process.communicate()
 
         # Check that makeblastdb ran okay
         if len(err) > 0:
@@ -1313,28 +1228,28 @@ class Contig:
         # This value tracks where we expect the next segment to start, in
         # contig coordinates.  When it is set to None, that means we don't
         # know.
-        expectedSegmentStartInContig = 1
+        expected_segment_start_in_contig = 1
 
-        for i in range(len(self.path.segmentList)):
-            segment = self.path.segmentList[i]
+        for i in range(len(self.path.segment_list)):
+            segment = self.path.segment_list[i]
 
             # Don't deal with assembly gaps just yet - we'll give them contig
             # start/end coordinates after we've finished with the real
             # segments.
             if segment.startswith('gap'):
-                expectedSegmentStartInContig = None
+                expected_segment_start_in_contig = None
                 continue
 
-            segmentSequence = segmentSequences[segment]
-            segmentLength = len(segmentSequence)
+            segment_sequence = segment_sequences[segment]
+            segment_length = len(segment_sequence)
 
-            saveSequenceToFastaFile(segmentSequence, segment, 'GetSPAdesContigGraph-temp/segment.fasta')
+            save_sequence_to_fasta_file(segment_sequence, segment, 'GetSPAdesContigGraph-temp/segment.fasta')
 
             # BLAST for the segment in the contig
             sys.stdout.flush()
-            blastnCommand = ['blastn', '-task', 'blastn', '-db', 'GetSPAdesContigGraph-temp/contig.fasta', '-query', 'GetSPAdesContigGraph-temp/segment.fasta', '-outfmt', '6 length pident sstart send qstart qend']
-            p = subprocess.Popen(blastnCommand, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = p.communicate()
+            blastn_command = ['blastn', '-task', 'blastn', '-db', 'GetSPAdesContigGraph-temp/contig.fasta', '-query', 'GetSPAdesContigGraph-temp/segment.fasta', '-outfmt', '6 length pident sstart send qstart qend']
+            process = subprocess.Popen(blastn_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, err = process.communicate()
 
             # Check that blastn ran okay
             if len(err) > 0:
@@ -1343,39 +1258,39 @@ class Contig:
                 quit()
 
             # Save the alignments in Python objects.
-            alignmentStrings = out.splitlines()
-            blastAlignments = []
-            for alignmentString in alignmentStrings:
-                alignment = BlastAlignment(alignmentString, segmentLength)
-                blastAlignments.append(alignment)
+            alignment_strings = out.splitlines()
+            blast_alignments = []
+            for alignment_string in alignment_strings:
+                alignment = BlastAlignment(alignment_string, segment_length)
+                blast_alignments.append(alignment)
 
             # Get the alignment (if any) that best matches the segment sequence
             # and position.
-            bestAlignment = getBestBlastAlignment(blastAlignments, segmentLength, expectedSegmentStartInContig)
+            best_alignment = get_best_blast_alignment(blast_alignments, segment_length, expected_segment_start_in_contig)
 
             # If we found an alignment, use it to determine the query's start
             # and end coordinates in the contig.
-            if bestAlignment is not None:
-                segmentStartInContig = bestAlignment.getQueryStartInReference()
-                segmentEndInContig = bestAlignment.getQueryEndInReference()
+            if best_alignment is not None:
+                segment_start_in_contig = best_alignment.get_query_start_in_reference()
+                segment_end_in_contig = best_alignment.get_query_end_in_reference()
 
             # If we failed to find an alignment, then we don't have segment
             # coordinates and will be unable to split the contig at this point.
             else:
-                segmentStartInContig = None
-                segmentEndInContig = None
+                segment_start_in_contig = None
+                segment_end_in_contig = None
 
-            self.path.contigCoordinates[i] = (segmentStartInContig, segmentEndInContig)
+            self.path.contig_coordinates[i] = (segment_start_in_contig, segment_end_in_contig)
 
             # Update the expected segment start for the next segment.
             # Hopefully we can use the alignment to do this precisely.
-            if bestAlignment is not None:
-                expectedSegmentStartInContig = (bestAlignment.referenceEnd - graph_overlap + 1)
+            if best_alignment is not None:
+                expected_segment_start_in_contig = (best_alignment.reference_end - graph_overlap + 1)
 
             # If there is no alignment with which we can predict the next
             # segment start, we can guess using the segment length.
-            elif expectedSegmentStartInContig is not None:
-                expectedSegmentStartInContig += (segmentLength - graph_overlap)
+            elif expected_segment_start_in_contig is not None:
+                expected_segment_start_in_contig += (segment_length - graph_overlap)
 
             os.remove('GetSPAdesContigGraph-temp/segment.fasta')
 
@@ -1383,185 +1298,138 @@ class Contig:
 
         # Now we have to go back and assign contig start/end positions for any
         # gap segments.
-        segmentCount = len(self.path.segmentList)
-        for i in range(segmentCount):
-            segment = self.path.segmentList[i]
+        segment_count = len(self.path.segment_list)
+        for i in range(segment_count):
+            segment = self.path.segment_list[i]
             if not segment.startswith('gap'):
                 continue
 
-            gapStartInContig = 1
-            gapEndInContig = len(self.sequence)
+            gap_start_in_contig = 1
+            gap_end_in_contig = len(self.sequence)
 
             if i > 0:
-                previousSegmentEnd = self.path.contigCoordinates[i - 1][1]
-                if previousSegmentEnd is not None:
-                    gapStartInContig = previousSegmentEnd - graph_overlap + 1
-                    if gapStartInContig < 1:
-                        gapStartInContig = 1
+                previous_segment_end = self.path.contig_coordinates[i - 1][1]
+                if previous_segment_end is not None:
+                    gap_start_in_contig = previous_segment_end - graph_overlap + 1
+                    if gap_start_in_contig < 1:
+                        gap_start_in_contig = 1
                 else:
-                    gapStartInContig = None
+                    gap_start_in_contig = None
 
-            if i < segmentCount - 1:
-                nextSegmentStart = self.path.contigCoordinates[i + 1][0]
-                if nextSegmentStart is not None:
-                    gapEndInContig = nextSegmentStart + graph_overlap - 1
-                    if gapEndInContig > len(self.sequence):
-                        gapEndInContig = len(self.sequence)
+            if i < segment_count - 1:
+                next_segment_start = self.path.contig_coordinates[i + 1][0]
+                if next_segment_start is not None:
+                    gap_end_in_contig = next_segment_start + graph_overlap - 1
+                    if gap_end_in_contig > len(self.sequence):
+                        gap_end_in_contig = len(self.sequence)
                 else:
-                    gapEndInContig = None
+                    gap_end_in_contig = None
 
-            self.path.contigCoordinates[i] = (gapStartInContig, gapEndInContig)
+            self.path.contig_coordinates[i] = (gap_start_in_contig, gap_end_in_contig)
 
+    def get_links_to_other_contigs(self):
+        """
+        Return a list of the links from this contig to any other contig.
+        """
+        links_to_other_contigs = []
+        for outgoing_linked_contig in self.outgoing_linked_contigs:
+            links_to_other_contigs.append((self.get_ending_segment(), outgoing_linked_contig.get_starting_segment()))
+        for incoming_linked_contig in self.incoming_linked_contigs:
+            links_to_other_contigs.append((incoming_linked_contig.get_ending_segment(), self.get_starting_segment()))
+        return list(set(links_to_other_contigs))
 
-    # This function returns true if this contig contains the entirety of the
-    # other contig.  It will also return true if the two contigs are identical.
-    # http://stackoverflow.com/questions/3847386/testing-if-a-list-contains-another-list-with-python
-    def contains(self, otherContig):
-        small = otherContig.path.segmentList
-        big = self.path.segmentList
-
-        for i in xrange(len(big)-len(small)+1):
-            for j in xrange(len(small)):
-                if big[i+j] != small[j]:
-                    break
-            else:
-                return True
-
-        return False
-
-    # This function returns a list of the links from this contig to any
-    # other contig.
-    def getLinksToOtherContigs(self):
-        linksToOtherContigs = []
-        for outgoingLinkedContig in self.outgoingLinkedContigs:
-            linksToOtherContigs.append((self.getEndingSegment(), outgoingLinkedContig.getStartingSegment()))
-        for incomingLinkedContig in self.incomingLinkedContigs:
-            linksToOtherContigs.append((incomingLinkedContig.getEndingSegment(), self.getStartingSegment()))
-        return list(set(linksToOtherContigs))
-
-    def getLinksInThisContigAndToOtherContigs(self):
-        links = self.path.getAllLinks()
-        links.extend(self.getLinksToOtherContigs())
+    def get_links_in_this_contig_and_to_other_contigs(self):
+        links = self.path.get_all_links()
+        links.extend(self.get_links_to_other_contigs())
         return list(set(links))
-
-
-
-
 
 
 # This class holds a path: the lists of graph segments making up a contig.
 class Path:
-    def __init__(self, segmentList=[]):
-        self.segmentList = segmentList
-        self.contigCoordinates = [(0, 0) for i in range(len(segmentList))]
+    def __init__(self, segment_list=[]):
+        self.segment_list = segment_list
+        self.contig_coordinates = [(0, 0) for i in range(len(segment_list))]
 
-    def getFirstSegment(self):
-        return self.segmentList[0]
+    def get_first_segment(self):
+        return self.segment_list[0]
 
-    def getLastSegment(self):
-        return self.segmentList[-1]
+    def get_last_segment(self):
+        return self.segment_list[-1]
 
     def __str__(self):
-        return str(self.segmentList) + ', ' + str(self.contigCoordinates)
+        return str(self.segment_list) + ', ' + str(self.contig_coordinates)
 
     def __repr__(self):
-        return str(self.segmentList) + ', ' + str(self.contigCoordinates)
+        return str(self.segment_list) + ', ' + str(self.contig_coordinates)
 
-    def getSegmentCount(self):
-        return len(self.segmentList)
+    def get_segment_count(self):
+        return len(self.segment_list)
 
-    def findSegmentLocations(self, s):
+    def find_segment_locations(self, segment):
         locations = []
-        for i in range(len(self.segmentList)):
-            if s == self.segmentList[i]:
+        for i in range(len(self.segment_list)):
+            if segment == self.segment_list[i]:
                 locations.append(i)
         return locations
 
-    def getPathsWithLineBreaks(self):
+    def get_paths_with_line_breaks(self):
         output = ''
-        for segment in self.segmentList:
+        for segment in self.segment_list:
             if segment.startswith('gap'):
                 output += ';\n'
             else:
                 output += segment + ','
         return output[:-1] + '\n'
 
-    # This function looks for a particular link within the path.  It returns
-    # true if the link is present, false if not.
-    def containsLink(self, start, end):
-
-        # A path must have at least 2 segments to possibly contain the link.
-        if len(self.segmentList) < 2:
-            return False
-
-        for i in range(len(self.segmentList) - 1):
-            s1 = self.segmentList[i]
-            s2 = self.segmentList[i + 1]
-            if s1 == start and s2 == end:
-                return True
-        return False
-
     # This function returns a list of tuple for each link in the path.
-    def getAllLinks(self):
+    def get_all_links(self):
         links = []
-        for i in range(len(self.segmentList) - 1):
-            s1 = self.segmentList[i]
-            s2 = self.segmentList[i + 1]
-            links.append((s1, s2))
+        for i in range(len(self.segment_list) - 1):
+            s_1 = self.segment_list[i]
+            s_2 = self.segment_list[i + 1]
+            links.append((s_1, s_2))
         return links
-
-
-
-
-
 
 
 class BlastAlignment:
 
-    def __init__(self, blastString, queryLength):
-        blastStringParts = blastString.split('\t')
+    def __init__(self, blast_string, query_length):
+        blast_string_parts = blast_string.split('\t')
 
-        self.percentIdentity = float(blastStringParts[1])
+        self.percent_identity = float(blast_string_parts[1])
 
-        self.referenceStart = int(blastStringParts[2])
-        self.referenceEnd = int(blastStringParts[3])
+        self.reference_start = int(blast_string_parts[2])
+        self.reference_end = int(blast_string_parts[3])
 
-        self.queryStart = int(blastStringParts[4])
-        self.queryEnd = int(blastStringParts[5])
+        self.query_start = int(blast_string_parts[4])
+        self.query_end = int(blast_string_parts[5])
 
-        self.queryLength = queryLength
+        self.query_length = query_length
 
-    def getQueryLength(self):
-        return self.queryEnd - self.queryStart + 1
+    def get_query_length(self):
+        return self.query_end - self.query_start + 1
 
-    def getReferenceLength(self):
-        return self.referenceEnd - self.referenceStart + 1
+    def get_query_start_in_reference(self):
+        query_missing_bases_at_start = self.query_start - 1
+        return self.reference_start - query_missing_bases_at_start
 
-    def getQueryStartInReference(self):
-        queryMissingBasesAtStart = self.queryStart - 1
-        return self.referenceStart - queryMissingBasesAtStart
-
-    def getQueryEndInReference(self):
-        queryMissingBasesAtEnd = self.queryLength - self.queryEnd
-        return self.referenceEnd + queryMissingBasesAtEnd
+    def get_query_end_in_reference(self):
+        query_missing_bases_at_end = self.query_length - self.query_end
+        return self.reference_end + query_missing_bases_at_end
 
 
     def __lt__(self, other):
-        return self.getQueryStartInReference() < other.getQueryStartInReference()
+        return self.get_query_start_in_reference() < other.get_query_start_in_reference()
 
     def __str__(self):
-        return 'reference: ' + str(self.referenceStart) + ' to ' + str(self.referenceEnd) + \
-               ', query: ' + str(self.queryStart) + ' to ' + str(self.queryEnd) + \
-               ', identity: ' + str(self.percentIdentity) + '%'
+        return 'reference: ' + str(self.reference_start) + ' to ' + str(self.reference_end) + \
+               ', query: ' + str(self.query_start) + ' to ' + str(self.query_end) + \
+               ', identity: ' + str(self.percent_identity) + '%'
 
     def __repr__(self):
-        return 'reference: ' + str(self.referenceStart) + ' to ' + str(self.referenceEnd) + \
-               ', query: ' + str(self.queryStart) + ' to ' + str(self.queryEnd) + \
-               ', identity: ' + str(self.percentIdentity) + '%'
-
-
-
-
+        return 'reference: ' + str(self.reference_start) + ' to ' + str(self.reference_end) + \
+               ', query: ' + str(self.query_start) + ' to ' + str(self.query_end) + \
+               ', identity: ' + str(self.percent_identity) + '%'
 
 
 # Standard boilerplate to call the main() function to begin the program.
