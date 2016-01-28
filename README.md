@@ -8,7 +8,7 @@ SPAdes Contig Graph requires an assembly from SPAdes 3.6.2 or later, as this is 
 
 
 
-# Tools modes
+# Modes
 
 ### Length priority
 
