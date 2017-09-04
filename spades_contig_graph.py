@@ -380,7 +380,7 @@ def add_paths_to_contigs(contigs, paths):
     knows its graph path.
     """
     for contig in contigs:
-        contig.add_path(paths[contig.get_number_with_sign()])
+        contig.path = paths[contig.get_number_with_sign()]
 
 def add_links_to_contigs(contigs, links, clear, dead_ends_only):
     """
@@ -407,12 +407,12 @@ def add_links_to_contigs(contigs, links, clear, dead_ends_only):
     # it leads to, and then find the contigs which start with that next
     # segment.  These make up the links to the current contig.
     for contig_1 in contigs:
-        ending_segment = contig_1.get_ending_segment()
+        ending_segment = contig_1.path.get_last_segment()
         following_segments = links[ending_segment]
 
         for following_segment in following_segments:
             for contig_2 in contigs:
-                starting_segment = contig_2.get_starting_segment()
+                starting_segment = contig_2.path.get_first_segment()
                 if following_segment == starting_segment:
                     if dead_ends_only and contig_1 not in no_outgoing_links and contig_2 not in no_incoming_links:
                         continue
@@ -546,7 +546,7 @@ def split_contigs_2(contigs, links, segment_sequences, graph_overlap):
     dead_end_start_segments = []
     for contig in contigs:
         if not contig.outgoing_linked_contigs:
-            dead_end_end = contig.get_ending_segment()
+            dead_end_end = contig.path.get_last_segment()
             dead_end_end_segments.append(dead_end_end)
             dead_end_start_segments.append(get_opposite_sequence_number(dead_end_end))
 
@@ -609,7 +609,7 @@ def split_contigs_2(contigs, links, segment_sequences, graph_overlap):
             split_points = split_points[1:]
 
         # If the last split point is one past the end, then remove it.
-        if split_points and split_points[-1] == contig.get_segment_count():
+        if split_points and split_points[-1] == contig.path.get_segment_count():
             split_points = split_points[:-1]
 
         # If there are splits to be done, then we make the new contigs!
@@ -753,11 +753,11 @@ def split_contig(contig, split_point, next_contig_number):
     # The first contig is the one that will potentially be split again, so it
     # still needs to have contig coordinates in its path.
     new_contig_1 = Contig(new_contig_1_name, new_contig_1_sequence)
-    new_contig_1.add_path(new_contig_1_path)
+    new_contig_1.path = new_contig_1_path
     new_contig_1.path.contig_coordinates = new_contig_1_path_coordinates
 
     new_contig_2 = Contig(new_contig_2_name, new_contig_2_sequence)
-    new_contig_2.add_path(new_contig_2_path)
+    new_contig_2.path = new_contig_2_path
 
     return new_contig_1, new_contig_2
 
@@ -1156,15 +1156,6 @@ class Contig:
         else:
             return '-'
 
-    def add_path(self, path):
-        self.path = path
-
-    def get_starting_segment(self):
-        return self.path.get_first_segment()
-
-    def get_ending_segment(self):
-        return self.path.get_last_segment()
-
     def is_positive(self):
         return self.fullname[-1] != "'"
 
@@ -1192,9 +1183,6 @@ class Contig:
             sequence_remaining = sequence_remaining[60:]
         sequence_with_line_breaks += sequence_remaining + '\n'
         return sequence_with_line_breaks
-
-    def get_segment_count(self):
-        return self.path.get_segment_count()
 
     def find_segment_locations(self, segment):
         return self.path.find_segment_locations(segment)
@@ -1333,9 +1321,9 @@ class Contig:
         """
         links_to_other_contigs = []
         for outgoing_linked_contig in self.outgoing_linked_contigs:
-            links_to_other_contigs.append((self.get_ending_segment(), outgoing_linked_contig.get_starting_segment()))
+            links_to_other_contigs.append((self.path.get_last_segment(), outgoing_linked_contig.path.get_first_segment()))
         for incoming_linked_contig in self.incoming_linked_contigs:
-            links_to_other_contigs.append((incoming_linked_contig.get_ending_segment(), self.get_starting_segment()))
+            links_to_other_contigs.append((incoming_linked_contig.path.get_last_segment(), self.path.get_first_segment()))
         return list(set(links_to_other_contigs))
 
     def get_links_in_this_contig_and_to_other_contigs(self):
