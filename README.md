@@ -1,3 +1,11 @@
+# This tool is deprecated!
+
+[Unicycler](https://github.com/rrwick/Unicycler) is an assembly tool for bacterial genomes which can function as a SPAdes-optimiser. If given short reads as input, it will run SPAdes and apply repeat resolution (from the `contigs.paths` file) to the graph. Unicycler's behaviour is therefore similar to this tool's connection-priority mode. However, it has the added benefit of assigning quality scores to the repeat resolution to avoid applying those which may cause misassemblies.
+
+The current recommendation is therefore to assemble with Unicycler. Since Unicycler always produces outputs in graph format, this tool is not needed. If you're still interested in using this tool, the original README follows:
+
+
+
 # SPAdes Contig Graph
 
 This tool produces a fastg graph from either the contigs or scaffolds from a [SPAdes](http://bioinf.spbau.ru/spades) assembly.  It uses the sequences from the contigs/scaffolds fasta file and adds connections that it infers from the assembly_graph.fastg file and the paths file.
